@@ -1,0 +1,18 @@
+{
+  "name": "E4 Colony Count",
+  "short_name": "E4 Count",
+  "description": "記錄 E4 不同鹽度三重複培養盤的分區 colony 數量、照片與備註。",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f5f1e7",
+  "theme_color": "#315c4b",
+  "icons": [
+    {
+      "src": "app-icon.png",
+      "sizes": "1254x1254",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
