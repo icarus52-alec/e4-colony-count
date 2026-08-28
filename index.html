@@ -313,8 +313,11 @@
       <div class="button-row">
         <button class="btn" id="applySetup" type="button">建立／更新記錄表</button>
         <button class="btn secondary" id="exportCsv" type="button">匯出 CSV</button>
-        <button class="btn secondary" id="backupJson" type="button">完整備份</button>
+        <button class="btn secondary" id="backupJson" type="button">下載完整備份 JSON</button>
+        <button class="btn secondary" id="restoreJson" type="button">匯入完整備份</button>
+        <button class="btn secondary" id="readableBackup" type="button">下載可閱讀備份 ZIP</button>
         <button class="btn danger" id="clearAll" type="button">清除全部</button>
+        <input id="restoreFile" type="file" accept="application/json,.json" hidden />
       </div>
     </section>
 
@@ -337,7 +340,7 @@
     </section>
 
     <footer>
-      不同樣本與日期會分開保存。照片與數據只保存在目前瀏覽器／裝置；清除瀏覽器網站資料會移除紀錄。建議每次實驗結束後匯出 CSV，並下載完整備份保存照片。
+      不同樣本與日期會分開保存。照片與數據只保存在目前瀏覽器／裝置；清除瀏覽器網站資料會移除紀錄。「完整備份 JSON」用於還原 App；「可閱讀備份 ZIP」可在電腦直接查看 CSV 與 JPG。
     </footer>
   </div>
 
@@ -504,6 +507,20 @@
         tx.objectStore(DB_STORE).delete(id);
         tx.oncomplete = resolve;
         tx.onerror = () => reject(tx.error);
+      });
+      db.close();
+    }
+
+    async function replaceAllPhotos(photoMap) {
+      const db = await openPhotoDb();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(DB_STORE, 'readwrite');
+        const store = tx.objectStore(DB_STORE);
+        store.clear();
+        photoMap.forEach(({ id, blob }) => store.put(blob, id));
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error);
       });
       db.close();
     }
@@ -777,6 +794,160 @@
       downloadBlob(new Blob([JSON.stringify({ version: 2, exportedAt: new Date().toISOString(), state, photos }, null, 2)], { type: 'application/json' }), `E4_colony_count_backup_${state.countDate}.json`);
       statusEl.textContent = '完整備份已下載';
     });
+
+    document.querySelector('#restoreJson').addEventListener('click', () => document.querySelector('#restoreFile').click());
+
+    document.querySelector('#restoreFile').addEventListener('change', async event => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      try {
+        const backup = JSON.parse(await file.text());
+        if (!backup.state || typeof backup.state !== 'object' || !backup.photos || typeof backup.photos !== 'object') throw new Error('invalid backup');
+        const photoMap = Object.entries(backup.photos).map(([id, dataUrl]) => ({ id, blob: dataUrlToBlob(dataUrl) }));
+        if (!confirm(`匯入會取代目前所有 E4 計數與照片。\n備份內含 ${photoMap.length} 張照片。確定繼續？`)) return;
+        statusEl.textContent = '正在還原完整備份…';
+        await replaceAllPhotos(photoMap);
+        const restored = { ...defaultState(), ...backup.state };
+        restored.sessions = restored.sessions || {};
+        restored.records = restored.records || {};
+        Object.keys(state).forEach(key => delete state[key]);
+        Object.assign(state, restored);
+        ensureRecords();
+        saveState();
+        render();
+        statusEl.textContent = `備份已還原（${photoMap.length} 張照片）`;
+      } catch (error) {
+        console.error(error);
+        alert('無法匯入此備份。請確認檔案是由 E4 App 的「下載完整備份 JSON」產生。');
+        statusEl.textContent = '備份匯入失敗';
+      } finally {
+        event.target.value = '';
+      }
+    });
+
+    document.querySelector('#readableBackup').addEventListener('click', async () => {
+      statusEl.textContent = '正在製作可閱讀備份 ZIP…';
+      try {
+        saveCurrentSession();
+        const files = [];
+        const rows = allSessionCsvRows();
+        files.push({ name: 'E4_all_colony_counts.csv', data: new TextEncoder().encode('\ufeff' + rows.map(row => row.map(csvCell).join(',')).join('\r\n')) });
+        files.push({ name: 'README.txt', data: new TextEncoder().encode('E4 Colony Count readable backup\r\n\r\nE4_all_colony_counts.csv：所有樣本的計數與照片索引。\r\nphotos/：可直接用 Windows 相片開啟的培養盤 JPG。\r\n\r\n照片檔名格式：樣本名稱_日期_鹽度ppt_R編號.jpg\r\n') });
+        const usedNames = new Set();
+        let photoCount = 0;
+        for (const entry of photoEntries()) {
+          const blob = await getPhoto(entry.photoId);
+          if (!blob) continue;
+          const base = `${safeFilePart(entry.sampleName)}_${entry.countDate}_${entry.salinity}ppt_R${entry.rep}`;
+          let name = `photos/${base}.jpg`;
+          let suffix = 2;
+          while (usedNames.has(name.toLowerCase())) name = `photos/${base}_${suffix++}.jpg`;
+          usedNames.add(name.toLowerCase());
+          files.push({ name, data: new Uint8Array(await blob.arrayBuffer()) });
+          photoCount++;
+        }
+        const zip = createZip(files);
+        downloadBlob(zip, `E4_readable_backup_${todayLocal()}.zip`);
+        statusEl.textContent = `可閱讀備份已下載（${photoCount} 張照片）`;
+      } catch (error) {
+        console.error(error);
+        statusEl.textContent = '可閱讀備份製作失敗';
+        alert('無法製作 ZIP，請再試一次或先下載完整備份 JSON。');
+      }
+    });
+
+    function allSessionCsvRows() {
+      saveCurrentSession();
+      const sessions = Object.values(state.sessions || {});
+      const maxSections = Math.max(1, ...sessions.map(session => Number(session.sectionCount) || 0));
+      const rows = [['sample_name', 'date', 'salinity_ppt', 'replicate', ...Array.from({ length: maxSections }, (_, i) => `section_${i + 1}`), 'total_colonies', 'has_photo', 'photo_filename', 'note']];
+      sessions.sort((a, b) => `${a.countDate}${a.sampleName}`.localeCompare(`${b.countDate}${b.sampleName}`)).forEach(session => {
+        (session.salinities || []).forEach(salinity => [1, 2, 3].forEach(rep => {
+          const record = session.records?.[recordId(salinity, rep)] || { counts: [], note: '', hasPhoto: false };
+          const counts = Array.from({ length: maxSections }, (_, i) => record.counts?.[i] ?? '');
+          const photoName = record.hasPhoto ? `photos/${safeFilePart(session.sampleName || '未命名樣本')}_${session.countDate}_${salinity}ppt_R${rep}.jpg` : '';
+          rows.push([session.sampleName || '', session.countDate || '', salinity, `R${rep}`, ...counts, totalFor(record), record.hasPhoto ? 'yes' : 'no', photoName, record.note || '']);
+        }));
+      });
+      return rows;
+    }
+
+    function safeFilePart(value) {
+      return String(value || 'unnamed').normalize('NFKC').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '_').replace(/\s+/g, '_').replace(/^_+|_+$/g, '').slice(0, 80) || 'unnamed';
+    }
+
+    function dataUrlToBlob(dataUrl) {
+      if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) throw new Error('invalid photo');
+      const [header, payload] = dataUrl.split(',', 2);
+      const type = header.match(/^data:([^;,]+)/)?.[1] || 'image/jpeg';
+      const binary = header.includes(';base64') ? atob(payload) : decodeURIComponent(payload);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      return new Blob([bytes], { type });
+    }
+
+    const crcTable = (() => {
+      const table = new Uint32Array(256);
+      for (let n = 0; n < 256; n++) {
+        let c = n;
+        for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+        table[n] = c >>> 0;
+      }
+      return table;
+    })();
+
+    function crc32(bytes) {
+      let crc = 0xffffffff;
+      for (const byte of bytes) crc = crcTable[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+      return (crc ^ 0xffffffff) >>> 0;
+    }
+
+    function zipDateTime(date = new Date()) {
+      const year = Math.max(1980, date.getFullYear());
+      return {
+        time: (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2),
+        date: ((year - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate()
+      };
+    }
+
+    function concatBytes(parts) {
+      const output = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0));
+      let offset = 0;
+      parts.forEach(part => { output.set(part, offset); offset += part.length; });
+      return output;
+    }
+
+    function createZip(files) {
+      const encoder = new TextEncoder();
+      const localParts = [];
+      const centralParts = [];
+      const { time, date } = zipDateTime();
+      let offset = 0;
+      files.forEach(file => {
+        const name = encoder.encode(file.name.replaceAll('\\', '/'));
+        const data = file.data instanceof Uint8Array ? file.data : new Uint8Array(file.data);
+        const crc = crc32(data);
+        const local = new Uint8Array(30 + name.length);
+        const lv = new DataView(local.buffer);
+        lv.setUint32(0, 0x04034b50, true); lv.setUint16(4, 20, true); lv.setUint16(6, 0x0800, true); lv.setUint16(8, 0, true);
+        lv.setUint16(10, time, true); lv.setUint16(12, date, true); lv.setUint32(14, crc, true); lv.setUint32(18, data.length, true); lv.setUint32(22, data.length, true); lv.setUint16(26, name.length, true); lv.setUint16(28, 0, true);
+        local.set(name, 30);
+        localParts.push(local, data);
+        const central = new Uint8Array(46 + name.length);
+        const cv = new DataView(central.buffer);
+        cv.setUint32(0, 0x02014b50, true); cv.setUint16(4, 20, true); cv.setUint16(6, 20, true); cv.setUint16(8, 0x0800, true); cv.setUint16(10, 0, true);
+        cv.setUint16(12, time, true); cv.setUint16(14, date, true); cv.setUint32(16, crc, true); cv.setUint32(20, data.length, true); cv.setUint32(24, data.length, true); cv.setUint16(28, name.length, true);
+        cv.setUint16(30, 0, true); cv.setUint16(32, 0, true); cv.setUint16(34, 0, true); cv.setUint16(36, 0, true); cv.setUint32(38, 0, true); cv.setUint32(42, offset, true);
+        central.set(name, 46);
+        centralParts.push(central);
+        offset += local.length + data.length;
+      });
+      const central = concatBytes(centralParts);
+      const end = new Uint8Array(22);
+      const ev = new DataView(end.buffer);
+      ev.setUint32(0, 0x06054b50, true); ev.setUint16(4, 0, true); ev.setUint16(6, 0, true); ev.setUint16(8, files.length, true); ev.setUint16(10, files.length, true); ev.setUint32(12, central.length, true); ev.setUint32(16, offset, true); ev.setUint16(20, 0, true);
+      return new Blob([...localParts, central, end], { type: 'application/zip' });
+    }
 
     function blobToDataUrl(blob) {
       return new Promise((resolve, reject) => {
