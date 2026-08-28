@@ -119,7 +119,7 @@
     .panel { padding: 20px; border-radius: 20px; margin-bottom: 22px; }
     .panel h2 { margin: 0 0 15px; font-size: 1rem; }
 
-    .setup-grid { display: grid; grid-template-columns: 1.3fr .8fr .8fr; gap: 14px; align-items: end; }
+    .setup-grid { display: grid; grid-template-columns: 1fr 1.25fr .65fr .75fr; gap: 14px; align-items: end; }
     label { display: grid; gap: 7px; font-size: .82rem; font-weight: 800; }
     .hint { color: var(--muted); font-size: .75rem; font-weight: 500; line-height: 1.45; }
 
@@ -205,6 +205,26 @@
 
     .empty { padding: 46px 20px; border: 1px dashed var(--line); border-radius: 18px; color: var(--muted); text-align: center; }
 
+    .photo-library { margin-top: 30px; }
+    .photo-library-head { display: flex; justify-content: space-between; align-items: end; gap: 16px; margin-bottom: 16px; }
+    .photo-library-head h2 { margin: 0 0 4px; font-size: 1.15rem; }
+    .photo-library-head p { margin: 0; color: var(--muted); font-size: .78rem; }
+    .photo-search { max-width: 310px; }
+    .photo-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(205px, 1fr)); gap: 14px; }
+    .gallery-card { overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: var(--card); }
+    .gallery-image { width: 100%; height: 155px; padding: 0; border: 0; background: var(--photo-bg); display: block; }
+    .gallery-image img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .gallery-body { padding: 12px; }
+    .gallery-body strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .gallery-meta { margin: 3px 0 10px; color: var(--muted); font-size: .74rem; }
+    .gallery-load { width: 100%; }
+    .photo-viewer { width: min(920px, calc(100vw - 24px)); max-height: 92vh; padding: 0; border: 0; border-radius: 18px; overflow: hidden; background: #111; }
+    .photo-viewer::backdrop { background: rgba(0,0,0,.72); }
+    .photo-viewer img { display: block; width: 100%; max-height: 78vh; object-fit: contain; background: #111; }
+    .viewer-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; color: white; background: #111; }
+    .viewer-bar span { font-size: .82rem; }
+    .viewer-close { border: 0; border-radius: 9px; padding: 7px 12px; color: var(--ink); background: white; font-weight: 800; }
+
     footer { margin-top: 28px; color: var(--muted); font-size: .72rem; line-height: 1.6; }
 
     .header-actions { display: grid; justify-items: end; gap: 10px; }
@@ -231,7 +251,6 @@
     @media (max-width: 850px) {
       .plate-grid { grid-template-columns: 1fr; }
       .setup-grid { grid-template-columns: 1fr 1fr; }
-      .setup-grid > :first-child { grid-column: 1 / -1; }
     }
 
     @media (max-width: 560px) {
@@ -240,9 +259,10 @@
       .header-actions { justify-items: start; margin-top: 14px; }
       .save-status { display: inline-block; }
       .setup-grid { grid-template-columns: 1fr; }
-      .setup-grid > :first-child { grid-column: auto; }
       .button-row .btn { flex: 1; }
       .toolbar { align-items: start; }
+      .photo-library-head { display: block; }
+      .photo-search { max-width: none; margin-top: 12px; }
     }
   </style>
 </head>
@@ -269,6 +289,11 @@
     <section class="panel" aria-labelledby="setupTitle">
       <h2 id="setupTitle">實驗設定</h2>
       <div class="setup-grid">
+        <label>
+          樣本名稱
+          <input id="sampleName" placeholder="例如：E4-AV1-1" autocomplete="off" />
+          <span class="hint">樣本名稱與日期共同區分每次紀錄。</span>
+        </label>
         <label>
           鹽度濃度（ppt）
           <input id="salinities" value="0, 1, 2, 4, 8, 16, 32" />
@@ -300,10 +325,26 @@
 
     <main id="records"></main>
 
+    <section class="panel photo-library" aria-labelledby="photoLibraryTitle">
+      <div class="photo-library-head">
+        <div>
+          <h2 id="photoLibraryTitle">照片紀錄庫</h2>
+          <p>依樣本名稱、日期、鹽度或重複編號搜尋；點照片可放大。</p>
+        </div>
+        <input class="photo-search" id="photoSearch" type="search" placeholder="搜尋照片紀錄…" aria-label="搜尋照片紀錄" />
+      </div>
+      <div class="photo-gallery" id="photoGallery"></div>
+    </section>
+
     <footer>
-      照片與數據只保存在目前瀏覽器／裝置；清除瀏覽器網站資料會移除紀錄。建議每次實驗結束後匯出 CSV，並下載完整備份保存照片。
+      不同樣本與日期會分開保存。照片與數據只保存在目前瀏覽器／裝置；清除瀏覽器網站資料會移除紀錄。建議每次實驗結束後匯出 CSV，並下載完整備份保存照片。
     </footer>
   </div>
+
+  <dialog class="photo-viewer" id="photoViewer">
+    <img id="viewerImage" alt="培養盤照片放大檢視" />
+    <div class="viewer-bar"><span id="viewerCaption"></span><button class="viewer-close" id="viewerClose" type="button">關閉</button></div>
+  </dialog>
 
   <script>
     const STORAGE_KEY = 'e4-colony-count-v1';
@@ -312,12 +353,20 @@
 
     const state = loadState();
     const recordsEl = document.querySelector('#records');
+    const sampleNameEl = document.querySelector('#sampleName');
     const salinitiesEl = document.querySelector('#salinities');
     const sectionCountEl = document.querySelector('#sectionCount');
     const countDateEl = document.querySelector('#countDate');
     const statusEl = document.querySelector('#saveStatus');
     const progressEl = document.querySelector('#progress');
+    const photoSearchEl = document.querySelector('#photoSearch');
+    const photoGalleryEl = document.querySelector('#photoGallery');
+    const photoViewerEl = document.querySelector('#photoViewer');
+    const viewerImageEl = document.querySelector('#viewerImage');
+    const viewerCaptionEl = document.querySelector('#viewerCaption');
     const themeKey = 'e4-colony-theme-v1';
+    let galleryUrls = [];
+    let galleryRenderToken = 0;
 
     function applyTheme(theme) {
       const selected = ['pumpkin', 'red', 'blue', 'pink', 'violet'].includes(theme) ? theme : 'pumpkin';
@@ -340,20 +389,56 @@
     }
 
     function defaultState() {
-      return { salinities: [0, 1, 2, 4, 8, 16, 32], sectionCount: 4, countDate: todayLocal(), records: {} };
+      return { sampleName: '', salinities: [0, 1, 2, 4, 8, 16, 32], sectionCount: 4, countDate: todayLocal(), records: {}, sessions: {} };
     }
 
     function loadState() {
       try {
-        return { ...defaultState(), ...JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') };
+        const loaded = { ...defaultState(), ...JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') };
+        loaded.sessions = loaded.sessions || {};
+        loaded.records = loaded.records || {};
+        return loaded;
       } catch {
         return defaultState();
       }
     }
 
     function saveState() {
+      saveCurrentSession();
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       statusEl.textContent = '已儲存 ' + new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function sessionKey(sampleName = state.sampleName, countDate = state.countDate) {
+      return `${String(sampleName || '未命名樣本').trim() || '未命名樣本'}||${countDate}`;
+    }
+
+    function saveCurrentSession() {
+      state.sessions ||= {};
+      state.sessions[sessionKey()] = {
+        sampleName: state.sampleName || '',
+        countDate: state.countDate,
+        salinities: [...state.salinities],
+        sectionCount: state.sectionCount,
+        records: state.records
+      };
+    }
+
+    function clone(value) { return JSON.parse(JSON.stringify(value)); }
+
+    function loadSession(key) {
+      const session = state.sessions?.[key];
+      if (!session) return;
+      saveCurrentSession();
+      state.sampleName = session.sampleName || '';
+      state.countDate = session.countDate || todayLocal();
+      state.salinities = [...session.salinities];
+      state.sectionCount = session.sectionCount;
+      state.records = clone(session.records || {});
+      ensureRecords();
+      saveState();
+      render();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
     function recordId(salinity, rep) { return `s${salinity}-r${rep}`.replace('.', '_'); }
@@ -364,7 +449,7 @@
           const id = recordId(salinity, rep);
           const previous = state.records[id] || {};
           const counts = Array.from({ length: state.sectionCount }, (_, i) => previous.counts?.[i] ?? '');
-          state.records[id] = { salinity, rep, counts, note: previous.note || '', hasPhoto: Boolean(previous.hasPhoto) };
+          state.records[id] = { salinity, rep, counts, note: previous.note || '', hasPhoto: Boolean(previous.hasPhoto), photoId: previous.photoId || (previous.hasPhoto ? id : '') };
         });
       });
     }
@@ -445,6 +530,7 @@
     }
 
     function render() {
+      sampleNameEl.value = state.sampleName || '';
       salinitiesEl.value = state.salinities.join(', ');
       sectionCountEl.value = state.sectionCount;
       countDateEl.value = state.countDate;
@@ -495,13 +581,14 @@
 
           bindCard(card, record, id);
           grid.appendChild(card);
-          if (record.hasPhoto) loadPhotoPreview(card, id);
+          if (record.hasPhoto) loadPhotoPreview(card, record.photoId || id);
         });
 
         recordsEl.appendChild(group);
       });
 
       progressEl.textContent = `${completed} / ${state.salinities.length * 3} 完成計數`;
+      renderPhotoLibrary();
     }
 
     function escapeHtml(text) {
@@ -528,12 +615,15 @@
         statusEl.textContent = '正在處理照片…';
         try {
           const blob = await compressImage(file);
-          await savePhoto(id, blob);
+          const photoId = record.photoId || `${sessionKey()}::${id}`;
+          await savePhoto(photoId, blob);
           record.hasPhoto = true;
+          record.photoId = photoId;
           saveState();
           card.classList.add('has-photo');
           card.querySelector('.photo-zone').classList.add('has-photo');
           setPreview(card, blob);
+          renderPhotoLibrary();
         } catch {
           statusEl.textContent = '照片儲存失敗，請再試一次';
         }
@@ -541,14 +631,16 @@
 
       card.querySelector('.remove-photo').addEventListener('click', async () => {
         if (!confirm('移除這張培養盤照片？')) return;
-        await deletePhoto(id);
+        await deletePhoto(record.photoId || id);
         record.hasPhoto = false;
+        record.photoId = '';
         saveState();
         card.classList.remove('has-photo');
         card.querySelector('.photo-zone').classList.remove('has-photo');
         const img = card.querySelector('img');
         if (img.dataset.url) URL.revokeObjectURL(img.dataset.url);
         img.removeAttribute('src');
+        renderPhotoLibrary();
       });
 
       card.querySelector('textarea').addEventListener('input', event => {
@@ -557,9 +649,60 @@
       });
     }
 
-    async function loadPhotoPreview(card, id) {
-      const blob = await getPhoto(id);
+    async function loadPhotoPreview(card, photoId) {
+      const blob = await getPhoto(photoId);
       if (blob) setPreview(card, blob);
+    }
+
+    function photoEntries() {
+      saveCurrentSession();
+      const entries = [];
+      Object.entries(state.sessions || {}).forEach(([key, session]) => {
+        Object.entries(session.records || {}).forEach(([id, record]) => {
+          if (!record.hasPhoto) return;
+          entries.push({
+            key,
+            id,
+            photoId: record.photoId || id,
+            sampleName: session.sampleName || '未命名樣本',
+            countDate: session.countDate || '',
+            salinity: record.salinity,
+            rep: record.rep,
+            note: record.note || ''
+          });
+        });
+      });
+      return entries.sort((a, b) => `${b.countDate}${b.sampleName}`.localeCompare(`${a.countDate}${a.sampleName}`));
+    }
+
+    async function renderPhotoLibrary() {
+      const token = ++galleryRenderToken;
+      galleryUrls.forEach(URL.revokeObjectURL);
+      galleryUrls = [];
+      const query = photoSearchEl.value.trim().toLowerCase();
+      const entries = photoEntries().filter(entry => !query || `${entry.sampleName} ${entry.countDate} ${entry.salinity} ppt r${entry.rep} ${entry.note}`.toLowerCase().includes(query));
+      photoGalleryEl.innerHTML = entries.length ? '' : `<div class="empty">${query ? '找不到符合的照片紀錄。' : '尚未儲存培養盤照片。'}</div>`;
+      if (!entries.length) return;
+      const photos = await Promise.all(entries.map(async entry => ({ entry, blob: await getPhoto(entry.photoId) })));
+      if (token !== galleryRenderToken) return;
+      photos.forEach(({ entry, blob }) => {
+        if (!blob) return;
+        const url = URL.createObjectURL(blob);
+        galleryUrls.push(url);
+        const card = document.createElement('article');
+        card.className = 'gallery-card';
+        card.innerHTML = `<button class="gallery-image" type="button" aria-label="放大 ${escapeHtml(entry.sampleName)} ${entry.salinity} ppt R${entry.rep}"><img src="${url}" alt="${escapeHtml(entry.sampleName)} ${entry.salinity} ppt R${entry.rep} 培養盤照片" /></button><div class="gallery-body"><strong>${escapeHtml(entry.sampleName)}</strong><div class="gallery-meta">${entry.countDate} · ${entry.salinity} ppt · R${entry.rep}</div><button class="small-btn gallery-load" type="button">載入此紀錄</button></div>`;
+        card.querySelector('.gallery-image').addEventListener('click', () => openPhotoViewer(url, `${entry.sampleName} · ${entry.countDate} · ${entry.salinity} ppt · R${entry.rep}`));
+        card.querySelector('.gallery-load').addEventListener('click', () => loadSession(entry.key));
+        photoGalleryEl.appendChild(card);
+      });
+      if (!photoGalleryEl.children.length) photoGalleryEl.innerHTML = '<div class="empty">照片檔案不存在，請從完整備份還原。</div>';
+    }
+
+    function openPhotoViewer(url, caption) {
+      viewerImageEl.src = url;
+      viewerCaptionEl.textContent = caption;
+      photoViewerEl.showModal();
     }
 
     function setPreview(card, blob) {
@@ -576,40 +719,62 @@
     }
 
     document.querySelector('#applySetup').addEventListener('click', () => {
+      const sampleName = sampleNameEl.value.trim();
       const salinities = parseSalinities(salinitiesEl.value);
       const sections = Math.min(12, Math.max(1, Math.round(Number(sectionCountEl.value) || 4)));
+      const countDate = countDateEl.value || todayLocal();
+      if (!sampleName) return alert('請輸入樣本名稱。');
       if (!salinities.length) return alert('請至少輸入一個有效鹽度。');
-      state.salinities = salinities;
-      state.sectionCount = sections;
-      state.countDate = countDateEl.value || todayLocal();
+      const oldKey = sessionKey();
+      saveCurrentSession();
+      const nextKey = sessionKey(sampleName, countDate);
+      const isNamingExistingRecord = !state.sampleName && countDate === state.countDate && nextKey !== oldKey;
+      if (isNamingExistingRecord) {
+        state.sampleName = sampleName;
+        state.salinities = salinities;
+        state.sectionCount = sections;
+        delete state.sessions[oldKey];
+      } else if (nextKey !== oldKey && state.sessions[nextKey]) {
+        const session = state.sessions[nextKey];
+        state.sampleName = session.sampleName;
+        state.countDate = session.countDate;
+        state.salinities = [...session.salinities];
+        state.sectionCount = session.sectionCount;
+        state.records = clone(session.records || {});
+      } else {
+        state.sampleName = sampleName;
+        state.countDate = countDate;
+        state.salinities = salinities;
+        state.sectionCount = sections;
+        if (nextKey !== oldKey) state.records = {};
+      }
       ensureRecords();
       saveState();
       render();
     });
 
     document.querySelector('#exportCsv').addEventListener('click', () => {
-      const rows = [['date', 'salinity_ppt', 'replicate', ...Array.from({ length: state.sectionCount }, (_, i) => `section_${i + 1}`), 'total_colonies', 'has_photo', 'note']];
+      const rows = [['sample_name', 'date', 'salinity_ppt', 'replicate', ...Array.from({ length: state.sectionCount }, (_, i) => `section_${i + 1}`), 'total_colonies', 'has_photo', 'note']];
       state.salinities.forEach(s => [1, 2, 3].forEach(r => {
         const record = state.records[recordId(s, r)];
-        rows.push([state.countDate, s, `R${r}`, ...record.counts, totalFor(record), record.hasPhoto ? 'yes' : 'no', record.note]);
+        rows.push([state.sampleName, state.countDate, s, `R${r}`, ...record.counts, totalFor(record), record.hasPhoto ? 'yes' : 'no', record.note]);
       }));
-      downloadBlob(new Blob(['\ufeff' + rows.map(row => row.map(csvCell).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' }), `E4_colony_count_${state.countDate}.csv`);
+      const safeSample = (state.sampleName || 'sample').replace(/[\\/:*?"<>|]+/g, '_');
+      downloadBlob(new Blob(['\ufeff' + rows.map(row => row.map(csvCell).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' }), `E4_colony_count_${safeSample}_${state.countDate}.csv`);
     });
 
     function csvCell(value) { return `"${String(value ?? '').replaceAll('"', '""')}"`; }
 
     document.querySelector('#backupJson').addEventListener('click', async () => {
       statusEl.textContent = '正在準備完整備份…';
+      saveCurrentSession();
       const photos = {};
-      for (const s of state.salinities) {
-        for (const r of [1, 2, 3]) {
-          const id = recordId(s, r);
-          if (!state.records[id]?.hasPhoto) continue;
-          const blob = await getPhoto(id);
-          if (blob) photos[id] = await blobToDataUrl(blob);
-        }
+      const photoIds = [...new Set(photoEntries().map(entry => entry.photoId))];
+      for (const photoId of photoIds) {
+        const blob = await getPhoto(photoId);
+        if (blob) photos[photoId] = await blobToDataUrl(blob);
       }
-      downloadBlob(new Blob([JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), state, photos }, null, 2)], { type: 'application/json' }), `E4_colony_count_backup_${state.countDate}.json`);
+      downloadBlob(new Blob([JSON.stringify({ version: 2, exportedAt: new Date().toISOString(), state, photos }, null, 2)], { type: 'application/json' }), `E4_colony_count_backup_${state.countDate}.json`);
       statusEl.textContent = '完整備份已下載';
     });
 
@@ -641,7 +806,12 @@
       render();
     });
 
+    photoSearchEl.addEventListener('input', renderPhotoLibrary);
+    document.querySelector('#viewerClose').addEventListener('click', () => photoViewerEl.close());
+    photoViewerEl.addEventListener('click', event => { if (event.target === photoViewerEl) photoViewerEl.close(); });
+
     applyTheme(localStorage.getItem(themeKey) || 'pumpkin');
+    sampleNameEl.value = state.sampleName || '';
     countDateEl.value = state.countDate || todayLocal();
     ensureRecords();
     saveState();

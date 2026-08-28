@@ -1,7 +1,7 @@
 {
   "name": "E4 Colony Count",
   "short_name": "E4 Count",
-  "description": "記錄 E4 不同鹽度三重複培養盤的分區 colony 數量、照片與備註。",
+  "description": "依樣本與日期記錄 E4 不同鹽度三重複培養盤的 colony 數量、照片與備註。",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
