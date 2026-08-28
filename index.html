@@ -1,0 +1,562 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#315c4b" />
+  <title>E4 Colony Count</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #22312b;
+      --muted: #68756f;
+      --paper: #f5f1e7;
+      --card: #fffdf7;
+      --line: #d8d5ca;
+      --green: #315c4b;
+      --green-2: #497a66;
+      --mint: #dcebe2;
+      --amber: #dc8a2e;
+      --danger: #a23b32;
+      --shadow: 0 16px 42px rgba(38, 57, 49, .10);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at 92% 2%, rgba(220, 138, 46, .12), transparent 24rem),
+        linear-gradient(145deg, #f7f2e8, #edf2ed);
+    }
+
+    button, input, textarea { font: inherit; }
+    button { cursor: pointer; }
+
+    .shell { width: min(1100px, 100%); margin: 0 auto; padding: 24px 18px 80px; }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      align-items: end;
+      margin-bottom: 22px;
+    }
+
+    .kicker {
+      margin: 0 0 7px;
+      color: var(--green-2);
+      font-size: .75rem;
+      font-weight: 850;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+
+    h1 { margin: 0; font-family: Georgia, "Noto Serif TC", serif; font-size: clamp(2.1rem, 7vw, 4.7rem); line-height: .96; letter-spacing: -.045em; }
+    header p:last-child { margin: 12px 0 0; color: var(--muted); line-height: 1.55; }
+
+    .save-status {
+      flex: 0 0 auto;
+      padding: 8px 12px;
+      border-radius: 999px;
+      color: var(--green);
+      background: var(--mint);
+      font-size: .78rem;
+      font-weight: 800;
+    }
+
+    .panel, .plate-card {
+      border: 1px solid rgba(49, 92, 75, .14);
+      background: rgba(255, 253, 247, .94);
+      box-shadow: var(--shadow);
+    }
+
+    .panel { padding: 20px; border-radius: 20px; margin-bottom: 22px; }
+    .panel h2 { margin: 0 0 15px; font-size: 1rem; }
+
+    .setup-grid { display: grid; grid-template-columns: 1.3fr .8fr .8fr; gap: 14px; align-items: end; }
+    label { display: grid; gap: 7px; font-size: .82rem; font-weight: 800; }
+    .hint { color: var(--muted); font-size: .75rem; font-weight: 500; line-height: 1.45; }
+
+    input, textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      color: var(--ink);
+      background: white;
+      outline: none;
+    }
+
+    input { min-height: 45px; padding: 0 12px; }
+    textarea { min-height: 76px; padding: 11px 12px; resize: vertical; }
+    input:focus, textarea:focus { border-color: var(--green-2); box-shadow: 0 0 0 3px rgba(73, 122, 102, .13); }
+
+    .button-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 15px; }
+    .btn {
+      min-height: 43px;
+      border: 0;
+      border-radius: 11px;
+      padding: 0 16px;
+      color: white;
+      background: var(--green);
+      font-weight: 800;
+    }
+    .btn:hover { background: #254a3c; }
+    .btn.secondary { color: var(--green); background: var(--mint); }
+    .btn.secondary:hover { background: #cce1d5; }
+    .btn.danger { color: var(--danger); background: #f5e2df; }
+
+    .toolbar { display: flex; justify-content: space-between; gap: 14px; align-items: center; margin: 28px 0 14px; }
+    .toolbar h2 { margin: 0; font-size: 1rem; }
+    .progress { color: var(--muted); font-size: .8rem; font-weight: 750; }
+
+    .salinity-group { margin-bottom: 26px; }
+    .salinity-title { display: flex; align-items: center; gap: 10px; margin: 0 0 11px; font-size: 1.12rem; }
+    .salinity-title::after { content: ""; height: 1px; flex: 1; background: rgba(49, 92, 75, .18); }
+    .salinity-badge { padding: 5px 10px; border-radius: 999px; color: white; background: var(--green); font-size: .75rem; }
+
+    .plate-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+    .plate-card { border-radius: 17px; padding: 16px; overflow: hidden; }
+    .plate-card.complete { border-color: rgba(49, 92, 75, .42); }
+
+    .card-top { display: flex; justify-content: space-between; gap: 12px; align-items: start; margin-bottom: 13px; }
+    .rep { margin: 0; font-size: 1.05rem; }
+    .total { text-align: right; }
+    .total span { display: block; color: var(--muted); font-size: .66rem; font-weight: 800; text-transform: uppercase; letter-spacing: .07em; }
+    .total strong { font-family: Georgia, serif; font-size: 1.55rem; color: var(--green); }
+
+    .section-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+    .section-grid label { font-size: .72rem; }
+    .section-grid input { min-height: 41px; }
+
+    .photo-zone {
+      position: relative;
+      display: grid;
+      place-items: center;
+      min-height: 112px;
+      margin-top: 13px;
+      overflow: hidden;
+      border: 1px dashed #b8c7bf;
+      border-radius: 12px;
+      color: var(--green);
+      background: #f1f6f2;
+      text-align: center;
+    }
+
+    .photo-zone input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+    .photo-zone img { width: 100%; height: 150px; object-fit: cover; display: none; }
+    .photo-zone.has-photo img { display: block; }
+    .photo-zone.has-photo .photo-prompt { display: none; }
+    .photo-prompt { padding: 14px; font-size: .78rem; font-weight: 800; line-height: 1.5; }
+    .photo-prompt b { display: block; font-size: 1.35rem; }
+
+    .photo-actions { display: flex; gap: 8px; margin-top: 8px; }
+    .small-btn { flex: 1; min-height: 34px; border: 0; border-radius: 9px; color: var(--green); background: var(--mint); font-size: .72rem; font-weight: 800; }
+    .small-btn.remove-photo { color: var(--danger); background: #f5e2df; display: none; }
+    .plate-card.has-photo .remove-photo { display: block; }
+
+    .note { margin-top: 10px; }
+    .note textarea { min-height: 58px; font-size: .8rem; }
+
+    .empty { padding: 46px 20px; border: 1px dashed var(--line); border-radius: 18px; color: var(--muted); text-align: center; }
+
+    footer { margin-top: 28px; color: var(--muted); font-size: .72rem; line-height: 1.6; }
+
+    @media (max-width: 850px) {
+      .plate-grid { grid-template-columns: 1fr; }
+      .setup-grid { grid-template-columns: 1fr 1fr; }
+      .setup-grid > :first-child { grid-column: 1 / -1; }
+    }
+
+    @media (max-width: 560px) {
+      .shell { padding: 18px 12px 60px; }
+      header { display: block; }
+      .save-status { display: inline-block; margin-top: 14px; }
+      .setup-grid { grid-template-columns: 1fr; }
+      .setup-grid > :first-child { grid-column: auto; }
+      .button-row .btn { flex: 1; }
+      .toolbar { align-items: start; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <div>
+        <p class="kicker">Experiment E4</p>
+        <h1>Colony Count</h1>
+        <p>鹽度 × 三重複培養盤｜分區計數、照片與備註集中記錄</p>
+      </div>
+      <div class="save-status" id="saveStatus">資料儲存在此裝置</div>
+    </header>
+
+    <section class="panel" aria-labelledby="setupTitle">
+      <h2 id="setupTitle">實驗設定</h2>
+      <div class="setup-grid">
+        <label>
+          鹽度濃度（ppt）
+          <input id="salinities" value="0, 1, 2, 4, 8, 16, 32" />
+          <span class="hint">用逗號分隔；每個濃度會建立 R1、R2、R3。</span>
+        </label>
+        <label>
+          每盤分區數
+          <input id="sectionCount" type="number" min="1" max="12" step="1" value="4" />
+          <span class="hint">預設 4 區，總數為各區加總。</span>
+        </label>
+        <label>
+          計數日期
+          <input id="countDate" type="date" />
+          <span class="hint">套用到這次紀錄。</span>
+        </label>
+      </div>
+      <div class="button-row">
+        <button class="btn" id="applySetup" type="button">建立／更新記錄表</button>
+        <button class="btn secondary" id="exportCsv" type="button">匯出 CSV</button>
+        <button class="btn secondary" id="backupJson" type="button">完整備份</button>
+        <button class="btn danger" id="clearAll" type="button">清除全部</button>
+      </div>
+    </section>
+
+    <div class="toolbar">
+      <h2>培養盤紀錄</h2>
+      <div class="progress" id="progress">0 / 0 完成計數</div>
+    </div>
+
+    <main id="records"></main>
+
+    <footer>
+      照片與數據只保存在目前瀏覽器／裝置；清除瀏覽器網站資料會移除紀錄。建議每次實驗結束後匯出 CSV，並下載完整備份保存照片。
+    </footer>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'e4-colony-count-v1';
+    const DB_NAME = 'e4-colony-count-photos';
+    const DB_STORE = 'photos';
+
+    const state = loadState();
+    const recordsEl = document.querySelector('#records');
+    const salinitiesEl = document.querySelector('#salinities');
+    const sectionCountEl = document.querySelector('#sectionCount');
+    const countDateEl = document.querySelector('#countDate');
+    const statusEl = document.querySelector('#saveStatus');
+    const progressEl = document.querySelector('#progress');
+
+    function todayLocal() {
+      const d = new Date();
+      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+      return d.toISOString().slice(0, 10);
+    }
+
+    function defaultState() {
+      return { salinities: [0, 1, 2, 4, 8, 16, 32], sectionCount: 4, countDate: todayLocal(), records: {} };
+    }
+
+    function loadState() {
+      try {
+        return { ...defaultState(), ...JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') };
+      } catch {
+        return defaultState();
+      }
+    }
+
+    function saveState() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      statusEl.textContent = '已儲存 ' + new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function recordId(salinity, rep) { return `s${salinity}-r${rep}`.replace('.', '_'); }
+
+    function ensureRecords() {
+      state.salinities.forEach(salinity => {
+        [1, 2, 3].forEach(rep => {
+          const id = recordId(salinity, rep);
+          const previous = state.records[id] || {};
+          const counts = Array.from({ length: state.sectionCount }, (_, i) => previous.counts?.[i] ?? '');
+          state.records[id] = { salinity, rep, counts, note: previous.note || '', hasPhoto: Boolean(previous.hasPhoto) };
+        });
+      });
+    }
+
+    function parseSalinities(value) {
+      return [...new Set(value.split(',').map(x => Number(x.trim())).filter(x => Number.isFinite(x) && x >= 0))];
+    }
+
+    function totalFor(record) {
+      return record.counts.reduce((sum, value) => sum + (value === '' ? 0 : Number(value)), 0);
+    }
+
+    function isComplete(record) {
+      return record.counts.length === state.sectionCount && record.counts.every(value => value !== '' && Number(value) >= 0);
+    }
+
+    async function openPhotoDb() {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, 1);
+        request.onupgradeneeded = () => request.result.createObjectStore(DB_STORE);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+    }
+
+    async function savePhoto(id, blob) {
+      const db = await openPhotoDb();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(DB_STORE, 'readwrite');
+        tx.objectStore(DB_STORE).put(blob, id);
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+      });
+      db.close();
+    }
+
+    async function getPhoto(id) {
+      const db = await openPhotoDb();
+      const blob = await new Promise((resolve, reject) => {
+        const request = db.transaction(DB_STORE).objectStore(DB_STORE).get(id);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      db.close();
+      return blob;
+    }
+
+    async function deletePhoto(id) {
+      const db = await openPhotoDb();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(DB_STORE, 'readwrite');
+        tx.objectStore(DB_STORE).delete(id);
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+      });
+      db.close();
+    }
+
+    function compressImage(file) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+          const max = 1600;
+          const scale = Math.min(1, max / Math.max(img.width, img.height));
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.round(img.width * scale);
+          canvas.height = Math.round(img.height * scale);
+          canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+          canvas.toBlob(blob => {
+            URL.revokeObjectURL(url);
+            blob ? resolve(blob) : reject(new Error('無法處理照片'));
+          }, 'image/jpeg', .82);
+        };
+        img.onerror = reject;
+        img.src = url;
+      });
+    }
+
+    function render() {
+      salinitiesEl.value = state.salinities.join(', ');
+      sectionCountEl.value = state.sectionCount;
+      countDateEl.value = state.countDate;
+      recordsEl.innerHTML = '';
+
+      if (!state.salinities.length) {
+        recordsEl.innerHTML = '<div class="empty">請先輸入至少一個鹽度濃度。</div>';
+        progressEl.textContent = '0 / 0 完成計數';
+        return;
+      }
+
+      let completed = 0;
+      state.salinities.forEach(salinity => {
+        const group = document.createElement('section');
+        group.className = 'salinity-group';
+        group.innerHTML = `<h3 class="salinity-title"><span class="salinity-badge">${salinity} ppt</span></h3><div class="plate-grid"></div>`;
+        const grid = group.querySelector('.plate-grid');
+
+        [1, 2, 3].forEach(rep => {
+          const id = recordId(salinity, rep);
+          const record = state.records[id];
+          if (isComplete(record)) completed++;
+          const card = document.createElement('article');
+          card.className = `plate-card${isComplete(record) ? ' complete' : ''}${record.hasPhoto ? ' has-photo' : ''}`;
+          card.dataset.id = id;
+
+          const sectionInputs = record.counts.map((value, index) => `
+            <label>區域 ${index + 1}
+              <input class="count-input" data-index="${index}" type="number" min="0" step="1" inputmode="numeric" value="${value}" placeholder="0" />
+            </label>`).join('');
+
+          card.innerHTML = `
+            <div class="card-top">
+              <h4 class="rep">R${rep}</h4>
+              <div class="total"><span>Total colonies</span><strong>${totalFor(record)}</strong></div>
+            </div>
+            <div class="section-grid">${sectionInputs}</div>
+            <div class="photo-zone${record.hasPhoto ? ' has-photo' : ''}">
+              <img alt="${salinity} ppt R${rep} 培養盤照片" />
+              <div class="photo-prompt"><b>＋</b>拍照或選擇培養盤照片</div>
+              <input class="photo-input" type="file" accept="image/*" capture="environment" aria-label="拍攝 ${salinity} ppt R${rep} 培養盤" />
+            </div>
+            <div class="photo-actions">
+              <button type="button" class="small-btn choose-photo">拍照／更換</button>
+              <button type="button" class="small-btn remove-photo">移除照片</button>
+            </div>
+            <label class="note">備註<textarea placeholder="污染、菌落重疊、特殊觀察…">${escapeHtml(record.note)}</textarea></label>`;
+
+          bindCard(card, record, id);
+          grid.appendChild(card);
+          if (record.hasPhoto) loadPhotoPreview(card, id);
+        });
+
+        recordsEl.appendChild(group);
+      });
+
+      progressEl.textContent = `${completed} / ${state.salinities.length * 3} 完成計數`;
+    }
+
+    function escapeHtml(text) {
+      return String(text).replace(/[&<>'"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c]));
+    }
+
+    function bindCard(card, record, id) {
+      card.querySelectorAll('.count-input').forEach(input => {
+        input.addEventListener('input', () => {
+          const value = input.value;
+          record.counts[Number(input.dataset.index)] = value === '' ? '' : Math.max(0, Math.round(Number(value)));
+          card.querySelector('.total strong').textContent = totalFor(record);
+          card.classList.toggle('complete', isComplete(record));
+          saveState();
+          updateProgress();
+        });
+      });
+
+      const fileInput = card.querySelector('.photo-input');
+      card.querySelector('.choose-photo').addEventListener('click', () => fileInput.click());
+      fileInput.addEventListener('change', async () => {
+        const file = fileInput.files?.[0];
+        if (!file) return;
+        statusEl.textContent = '正在處理照片…';
+        try {
+          const blob = await compressImage(file);
+          await savePhoto(id, blob);
+          record.hasPhoto = true;
+          saveState();
+          card.classList.add('has-photo');
+          card.querySelector('.photo-zone').classList.add('has-photo');
+          setPreview(card, blob);
+        } catch {
+          statusEl.textContent = '照片儲存失敗，請再試一次';
+        }
+      });
+
+      card.querySelector('.remove-photo').addEventListener('click', async () => {
+        if (!confirm('移除這張培養盤照片？')) return;
+        await deletePhoto(id);
+        record.hasPhoto = false;
+        saveState();
+        card.classList.remove('has-photo');
+        card.querySelector('.photo-zone').classList.remove('has-photo');
+        const img = card.querySelector('img');
+        if (img.dataset.url) URL.revokeObjectURL(img.dataset.url);
+        img.removeAttribute('src');
+      });
+
+      card.querySelector('textarea').addEventListener('input', event => {
+        record.note = event.target.value;
+        saveState();
+      });
+    }
+
+    async function loadPhotoPreview(card, id) {
+      const blob = await getPhoto(id);
+      if (blob) setPreview(card, blob);
+    }
+
+    function setPreview(card, blob) {
+      const img = card.querySelector('img');
+      if (img.dataset.url) URL.revokeObjectURL(img.dataset.url);
+      const url = URL.createObjectURL(blob);
+      img.src = url;
+      img.dataset.url = url;
+    }
+
+    function updateProgress() {
+      const current = state.salinities.flatMap(s => [1, 2, 3].map(r => state.records[recordId(s, r)]));
+      progressEl.textContent = `${current.filter(isComplete).length} / ${current.length} 完成計數`;
+    }
+
+    document.querySelector('#applySetup').addEventListener('click', () => {
+      const salinities = parseSalinities(salinitiesEl.value);
+      const sections = Math.min(12, Math.max(1, Math.round(Number(sectionCountEl.value) || 4)));
+      if (!salinities.length) return alert('請至少輸入一個有效鹽度。');
+      state.salinities = salinities;
+      state.sectionCount = sections;
+      state.countDate = countDateEl.value || todayLocal();
+      ensureRecords();
+      saveState();
+      render();
+    });
+
+    document.querySelector('#exportCsv').addEventListener('click', () => {
+      const rows = [['date', 'salinity_ppt', 'replicate', ...Array.from({ length: state.sectionCount }, (_, i) => `section_${i + 1}`), 'total_colonies', 'has_photo', 'note']];
+      state.salinities.forEach(s => [1, 2, 3].forEach(r => {
+        const record = state.records[recordId(s, r)];
+        rows.push([state.countDate, s, `R${r}`, ...record.counts, totalFor(record), record.hasPhoto ? 'yes' : 'no', record.note]);
+      }));
+      downloadBlob(new Blob(['\ufeff' + rows.map(row => row.map(csvCell).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' }), `E4_colony_count_${state.countDate}.csv`);
+    });
+
+    function csvCell(value) { return `"${String(value ?? '').replaceAll('"', '""')}"`; }
+
+    document.querySelector('#backupJson').addEventListener('click', async () => {
+      statusEl.textContent = '正在準備完整備份…';
+      const photos = {};
+      for (const s of state.salinities) {
+        for (const r of [1, 2, 3]) {
+          const id = recordId(s, r);
+          if (!state.records[id]?.hasPhoto) continue;
+          const blob = await getPhoto(id);
+          if (blob) photos[id] = await blobToDataUrl(blob);
+        }
+      }
+      downloadBlob(new Blob([JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), state, photos }, null, 2)], { type: 'application/json' }), `E4_colony_count_backup_${state.countDate}.json`);
+      statusEl.textContent = '完整備份已下載';
+    });
+
+    function blobToDataUrl(blob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    function downloadBlob(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    document.querySelector('#clearAll').addEventListener('click', async () => {
+      if (!confirm('確定清除所有 E4 計數與照片？此動作無法復原。')) return;
+      localStorage.removeItem(STORAGE_KEY);
+      indexedDB.deleteDatabase(DB_NAME);
+      Object.assign(state, defaultState());
+      ensureRecords();
+      saveState();
+      render();
+    });
+
+    countDateEl.value = state.countDate || todayLocal();
+    ensureRecords();
+    saveState();
+    render();
+  </script>
+</body>
+</html>
