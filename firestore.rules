@@ -15,8 +15,8 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // E4 counts and images are private to the same owner account.
-    match /e4Owners/{userId}/{document=**} {
+    // E4 sync only: counts and original-photo filename metadata, never image data.
+    match /e4Owners/{userId}/sessions/{sessionId} {
       allow read, write: if request.auth != null
                          && request.auth.uid == 'ljJlyQ360cPg3kVzxngvHsm2Kco1'
                          && userId == request.auth.uid;

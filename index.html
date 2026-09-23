@@ -246,6 +246,7 @@
     .gallery-card { overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: var(--card); }
     .gallery-image { width: 100%; height: 155px; padding: 0; border: 0; background: var(--photo-bg); display: block; }
     .gallery-image img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .gallery-missing { display: grid; place-items: center; padding: 14px; color: var(--muted); text-align: center; font-size: .8rem; }
     .gallery-body { padding: 12px; }
     .gallery-body strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .gallery-meta { margin: 3px 0 10px; color: var(--muted); font-size: .74rem; }
@@ -383,6 +384,7 @@
         <summary>匯出、備份與管理</summary>
         <div class="button-row">
         <button class="btn secondary" id="exportCsv" type="button">匯出 CSV</button>
+        <button class="btn secondary" id="photoIndexCsv" type="button">下載照片對照 CSV</button>
         <button class="btn secondary" id="backupJson" type="button">下載完整備份 JSON</button>
         <button class="btn secondary" id="restoreJson" type="button">匯入完整備份</button>
         <button class="btn secondary" id="readableBackup" type="button">下載可閱讀備份 ZIP</button>
@@ -409,7 +411,7 @@
       <div class="photo-library-head">
         <div>
           <h2 id="photoLibraryTitle">照片紀錄庫</h2>
-          <p>依樣本名稱、日期、鹽度或重複編號搜尋；點照片可放大。</p>
+          <p>依樣本、日期、鹽度、重複編號或原圖檔名搜尋；其他裝置只顯示對照資訊。</p>
         </div>
         <input class="photo-search" id="photoSearch" type="search" placeholder="搜尋照片紀錄…" aria-label="搜尋照片紀錄" />
       </div>
@@ -417,7 +419,7 @@
     </section>
 
     <footer>
-      不同樣本與日期會分開保存。照片與數據只保存在目前瀏覽器／裝置；清除瀏覽器網站資料會移除紀錄。「完整備份 JSON」用於還原 App；「可閱讀備份 ZIP」可在電腦直接查看 CSV 與 JPG。
+      計數與照片對照資訊可同步；照片本身只保存在選取照片的瀏覽器／裝置，不會上傳雲端。請先用手機相機拍照並保留原圖，再從相簿選取加入紀錄；原圖檔名會列入照片對照 CSV。清除瀏覽器網站資料會移除本機照片；「完整備份 JSON」與「可閱讀備份 ZIP」包含本機預覽照片，不是相簿原圖。
     </footer>
   </div>
 
@@ -447,8 +449,6 @@
     const viewerCaptionEl = document.querySelector('#viewerCaption');
     const themeKey = 'e4-colony-theme-v1';
     const saveListeners = [];
-    const photoListeners = [];
-    const photoDeleteListeners = [];
     let galleryUrls = [];
     let galleryRenderToken = 0;
 
@@ -607,7 +607,7 @@
           const id = recordId(salinity, rep);
           const previous = state.records[id] || {};
           const counts = Array.from({ length: state.sectionCount }, (_, i) => previous.counts?.[i] ?? '');
-          state.records[id] = { salinity, rep, counts, note: previous.note || '', hasPhoto: Boolean(previous.hasPhoto), photoId: previous.photoId || (previous.hasPhoto ? id : '') };
+          state.records[id] = { salinity, rep, counts, note: previous.note || '', hasPhoto: Boolean(previous.hasPhoto), photoId: previous.photoId || (previous.hasPhoto ? id : ''), originalPhotoName: previous.originalPhotoName || '' };
         });
       });
     }
@@ -642,9 +642,6 @@
         tx.onerror = () => reject(tx.error);
       });
       db.close();
-      const pending = JSON.parse(localStorage.getItem('e4-pending-photo-deletes') || '[]').filter(item => item !== id);
-      localStorage.setItem('e4-pending-photo-deletes', JSON.stringify(pending));
-      photoListeners.forEach(listener => listener(id));
     }
 
     async function getLocalPhoto(id) {
@@ -659,26 +656,7 @@
     }
 
     async function getPhoto(id) {
-      const local = await getLocalPhoto(id);
-      if (local) return local;
-      let remote;
-      try { remote = await window.e4CloudDownloadPhoto?.(id); } catch (error) { console.warn('E4 photo download failed.', error); }
-      if (remote) {
-        await cachePhoto(id, remote);
-        return remote;
-      }
-      return undefined;
-    }
-
-    async function cachePhoto(id, blob) {
-      const db = await openPhotoDb();
-      await new Promise((resolve, reject) => {
-        const tx = db.transaction(DB_STORE, 'readwrite');
-        tx.objectStore(DB_STORE).put(blob, id);
-        tx.oncomplete = resolve;
-        tx.onerror = () => reject(tx.error);
-      });
-      db.close();
+      return getLocalPhoto(id);
     }
 
     async function deletePhoto(id) {
@@ -690,10 +668,6 @@
         tx.onerror = () => reject(tx.error);
       });
       db.close();
-      const pending = new Set(JSON.parse(localStorage.getItem('e4-pending-photo-deletes') || '[]'));
-      pending.add(id);
-      localStorage.setItem('e4-pending-photo-deletes', JSON.stringify([...pending]));
-      photoDeleteListeners.forEach(listener => listener(id));
     }
 
     async function replaceAllPhotos(photoMap) {
@@ -773,9 +747,10 @@
             <div class="section-grid${record.counts.length === 1 ? ' one-section' : ''}">${sectionInputs}</div>
             <div class="photo-zone${record.hasPhoto ? ' has-photo' : ''}">
               <img alt="${salinity} ppt R${rep} 培養盤照片" />
-              <div class="photo-prompt"><b>＋</b>拍照或選擇培養盤照片</div>
-              <input class="photo-input" type="file" accept="image/*" capture="environment" aria-label="拍攝 ${salinity} ppt R${rep} 培養盤" />
+              <div class="photo-prompt"><b>＋</b>從相簿選擇原圖</div>
+              <input class="photo-input" type="file" accept="image/*" aria-label="選擇 ${salinity} ppt R${rep} 培養盤原圖" />
             </div>
+            <details class="note photo-reference"><summary>原圖檔名${record.originalPhotoName ? '：' + escapeHtml(record.originalPhotoName) : '（可手動填寫）'}</summary><input class="original-photo-name" type="text" value="${escapeHtml(record.originalPhotoName || '')}" placeholder="例如 IMG_1234.HEIC" /></details>
             <div class="photo-actions">
               <button type="button" class="small-btn remove-photo">移除照片</button>
             </div>
@@ -822,11 +797,14 @@
           await savePhoto(photoId, blob);
           record.hasPhoto = true;
           record.photoId = photoId;
+          record.originalPhotoName = file.name || '';
           saveState();
           if (previousPhotoId) await deletePhoto(previousPhotoId);
           card.classList.add('has-photo');
           card.querySelector('.photo-zone').classList.add('has-photo');
           setPreview(card, blob);
+          card.querySelector('.original-photo-name').value = record.originalPhotoName;
+          card.querySelector('.photo-reference summary').textContent = `原圖檔名：${record.originalPhotoName}`;
           renderPhotoLibrary();
         } catch {
           statusEl.textContent = '照片儲存失敗，請再試一次';
@@ -838,12 +816,20 @@
         await deletePhoto(record.photoId || id);
         record.hasPhoto = false;
         record.photoId = '';
+        record.originalPhotoName = '';
         saveState();
         card.classList.remove('has-photo');
         card.querySelector('.photo-zone').classList.remove('has-photo');
         const img = card.querySelector('img');
         if (img.dataset.url) URL.revokeObjectURL(img.dataset.url);
         img.removeAttribute('src');
+        renderPhotoLibrary();
+      });
+
+      card.querySelector('.original-photo-name').addEventListener('change', event => {
+        record.originalPhotoName = event.target.value.trim();
+        card.querySelector('.photo-reference summary').textContent = record.originalPhotoName ? `原圖檔名：${record.originalPhotoName}` : '原圖檔名（可手動填寫）';
+        saveState();
         renderPhotoLibrary();
       });
 
@@ -856,6 +842,10 @@
     async function loadPhotoPreview(card, photoId) {
       const blob = await getPhoto(photoId);
       if (blob) setPreview(card, blob);
+      else {
+        card.querySelector('.photo-zone').classList.remove('has-photo');
+        card.querySelector('.photo-prompt').textContent = '本機無照片；點此重新選取（雲端只有檔名對照）';
+      }
     }
 
     function photoEntries() {
@@ -863,7 +853,7 @@
       const entries = [];
       Object.entries(state.sessions || {}).forEach(([key, session]) => {
         Object.entries(session.records || {}).forEach(([id, record]) => {
-          if (!record.hasPhoto) return;
+          if (!record.hasPhoto && !record.originalPhotoName) return;
           entries.push({
             key,
             id,
@@ -872,6 +862,7 @@
             countDate: session.countDate || '',
             salinity: record.salinity,
             rep: record.rep,
+            originalPhotoName: record.originalPhotoName || '',
             note: record.note || ''
           });
         });
@@ -884,23 +875,21 @@
       galleryUrls.forEach(URL.revokeObjectURL);
       galleryUrls = [];
       const query = photoSearchEl.value.trim().toLowerCase();
-      const entries = photoEntries().filter(entry => !query || `${entry.sampleName} ${entry.countDate} ${entry.salinity} ppt r${entry.rep} ${entry.note}`.toLowerCase().includes(query));
+      const entries = photoEntries().filter(entry => !query || `${entry.sampleName} ${entry.countDate} ${entry.salinity} ppt r${entry.rep} ${entry.originalPhotoName} ${entry.note}`.toLowerCase().includes(query));
       photoGalleryEl.innerHTML = entries.length ? '' : `<div class="empty">${query ? '找不到符合的照片紀錄。' : '尚未儲存培養盤照片。'}</div>`;
       if (!entries.length) return;
       const photos = await Promise.all(entries.map(async entry => ({ entry, blob: await getPhoto(entry.photoId) })));
       if (token !== galleryRenderToken) return;
       photos.forEach(({ entry, blob }) => {
-        if (!blob) return;
-        const url = URL.createObjectURL(blob);
-        galleryUrls.push(url);
+        const url = blob ? URL.createObjectURL(blob) : '';
+        if (url) galleryUrls.push(url);
         const card = document.createElement('article');
         card.className = 'gallery-card';
-        card.innerHTML = `<button class="gallery-image" type="button" aria-label="放大 ${escapeHtml(entry.sampleName)} ${entry.salinity} ppt R${entry.rep}"><img src="${url}" alt="${escapeHtml(entry.sampleName)} ${entry.salinity} ppt R${entry.rep} 培養盤照片" /></button><div class="gallery-body"><strong>${escapeHtml(entry.sampleName)}</strong><div class="gallery-meta">${entry.countDate} · ${entry.salinity} ppt · R${entry.rep}</div><button class="small-btn gallery-load" type="button">載入此紀錄</button></div>`;
-        card.querySelector('.gallery-image').addEventListener('click', () => openPhotoViewer(url, `${entry.sampleName} · ${entry.countDate} · ${entry.salinity} ppt · R${entry.rep}`));
+        card.innerHTML = `${url ? `<button class="gallery-image" type="button" aria-label="放大 ${escapeHtml(entry.sampleName)} ${entry.salinity} ppt R${entry.rep}"><img src="${url}" alt="${escapeHtml(entry.sampleName)} ${entry.salinity} ppt R${entry.rep} 培養盤照片" /></button>` : '<div class="gallery-image gallery-missing">此裝置沒有照片檔案<br>請依原圖檔名到相簿查找</div>'}<div class="gallery-body"><strong>${escapeHtml(entry.sampleName)}</strong><div class="gallery-meta">${entry.countDate} · ${entry.salinity} ppt · R${entry.rep}<br>原圖：${escapeHtml(entry.originalPhotoName || '未記錄檔名')}</div><button class="small-btn gallery-load" type="button">載入此紀錄</button></div>`;
+        if (url) card.querySelector('.gallery-image').addEventListener('click', () => openPhotoViewer(url, `${entry.sampleName} · ${entry.countDate} · ${entry.salinity} ppt · R${entry.rep}`));
         card.querySelector('.gallery-load').addEventListener('click', () => loadSession(entry.key));
         photoGalleryEl.appendChild(card);
       });
-      if (!photoGalleryEl.children.length) photoGalleryEl.innerHTML = '<div class="empty">照片檔案不存在，請從完整備份還原。</div>';
     }
 
     function openPhotoViewer(url, caption) {
@@ -977,16 +966,22 @@
     });
 
     document.querySelector('#exportCsv').addEventListener('click', () => {
-      const rows = [['sample_name', 'date', 'salinity_ppt', 'replicate', ...Array.from({ length: state.sectionCount }, (_, i) => `section_${i + 1}`), 'total_colonies', 'has_photo', 'note']];
+      const rows = [['sample_name', 'date', 'salinity_ppt', 'replicate', ...Array.from({ length: state.sectionCount }, (_, i) => `section_${i + 1}`), 'total_colonies', 'has_photo', 'original_photo_filename', 'note']];
       state.salinities.forEach(s => [1, 2, 3].forEach(r => {
         const record = state.records[recordId(s, r)];
-        rows.push([state.sampleName, state.countDate, s, `R${r}`, ...record.counts, totalFor(record), record.hasPhoto ? 'yes' : 'no', record.note]);
+        rows.push([state.sampleName, state.countDate, s, `R${r}`, ...record.counts, totalFor(record), record.hasPhoto ? 'yes' : 'no', record.originalPhotoName || '', record.note]);
       }));
       const safeSample = (state.sampleName || 'sample').replace(/[\\/:*?"<>|]+/g, '_');
       downloadBlob(new Blob(['\ufeff' + rows.map(row => row.map(csvCell).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' }), `E4_colony_count_${safeSample}_${state.countDate}.csv`);
     });
 
     function csvCell(value) { return `"${String(value ?? '').replaceAll('"', '""')}"`; }
+
+    document.querySelector('#photoIndexCsv').addEventListener('click', () => {
+      const rows = [['sample_name', 'date', 'salinity_ppt', 'replicate', 'original_photo_filename', 'note']];
+      photoEntries().forEach(entry => rows.push([entry.sampleName, entry.countDate, entry.salinity, `R${entry.rep}`, entry.originalPhotoName, entry.note]));
+      downloadBlob(new Blob(['\ufeff' + rows.map(row => row.map(csvCell).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' }), `E4_photo_index_${todayLocal()}.csv`);
+    });
 
     document.querySelector('#backupJson').addEventListener('click', async () => {
       statusEl.textContent = '正在準備完整備份…';
@@ -1038,7 +1033,7 @@
         const files = [];
         const rows = allSessionCsvRows();
         files.push({ name: 'E4_all_colony_counts.csv', data: new TextEncoder().encode('\ufeff' + rows.map(row => row.map(csvCell).join(',')).join('\r\n')) });
-        files.push({ name: 'README.txt', data: new TextEncoder().encode('E4 Colony Count readable backup\r\n\r\nE4_all_colony_counts.csv：所有樣本的計數與照片索引。\r\nphotos/：可直接用 Windows 相片開啟的培養盤 JPG。\r\n\r\n照片檔名格式：樣本名稱_日期_鹽度ppt_R編號.jpg\r\n') });
+        files.push({ name: 'README.txt', data: new TextEncoder().encode('E4 Colony Count readable backup\r\n\r\nE4_all_colony_counts.csv：所有樣本的計數與原圖檔名對照。\r\nphotos/：本裝置 App 儲存的壓縮預覽 JPG，不是手機相簿原圖。\r\n\r\n預覽照片檔名格式：樣本名稱_日期_鹽度ppt_R編號.jpg\r\n') });
         const usedNames = new Set();
         let photoCount = 0;
         for (const entry of photoEntries()) {
@@ -1066,13 +1061,13 @@
       saveCurrentSession();
       const sessions = Object.values(state.sessions || {});
       const maxSections = Math.max(1, ...sessions.map(session => Number(session.sectionCount) || 0));
-      const rows = [['sample_name', 'date', 'salinity_ppt', 'replicate', ...Array.from({ length: maxSections }, (_, i) => `section_${i + 1}`), 'total_colonies', 'has_photo', 'photo_filename', 'note']];
+      const rows = [['sample_name', 'date', 'salinity_ppt', 'replicate', ...Array.from({ length: maxSections }, (_, i) => `section_${i + 1}`), 'total_colonies', 'has_photo', 'original_photo_filename', 'local_preview_filename', 'note']];
       sessions.sort((a, b) => `${a.countDate}${a.sampleName}`.localeCompare(`${b.countDate}${b.sampleName}`)).forEach(session => {
         (session.salinities || []).forEach(salinity => [1, 2, 3].forEach(rep => {
           const record = session.records?.[recordId(salinity, rep)] || { counts: [], note: '', hasPhoto: false };
           const counts = Array.from({ length: maxSections }, (_, i) => record.counts?.[i] ?? '');
           const photoName = record.hasPhoto ? `photos/${safeFilePart(session.sampleName || '未命名樣本')}_${session.countDate}_${salinity}ppt_R${rep}.jpg` : '';
-          rows.push([session.sampleName || '', session.countDate || '', salinity, `R${rep}`, ...counts, totalFor(record), record.hasPhoto ? 'yes' : 'no', photoName, record.note || '']);
+          rows.push([session.sampleName || '', session.countDate || '', salinity, `R${rep}`, ...counts, totalFor(record), record.hasPhoto ? 'yes' : 'no', record.originalPhotoName || '', photoName, record.note || '']);
         }));
       });
       return rows;
@@ -1177,7 +1172,6 @@
       if (window.e4SyncBridge?.isSignedIn()) return alert('目前已登入雲端同步。請先登出，再清除這台裝置的資料；雲端紀錄不會被刪除。');
       if (!confirm('確定清除所有 E4 計數與照片？此動作無法復原。')) return;
       localStorage.removeItem(STORAGE_KEY);
-      localStorage.removeItem('e4-pending-photo-deletes');
       localStorage.removeItem('e4-pending-session-deletes');
       indexedDB.deleteDatabase(DB_NAME);
       Object.assign(state, defaultState());
@@ -1200,15 +1194,9 @@
     window.e4SyncBridge = {
       getSessions: () => clone(state.sessions || {}),
       mergeCloudSessions,
-      getPhotoIds: () => [...new Set(Object.values(state.sessions || {}).flatMap(session => Object.entries(session.records || {}).filter(([, record]) => record.hasPhoto).map(([id, record]) => record.photoId || id)))],
-      getLocalPhoto,
-      getPendingPhotoDeletes: () => JSON.parse(localStorage.getItem('e4-pending-photo-deletes') || '[]'),
-      markPhotoDeleted: id => localStorage.setItem('e4-pending-photo-deletes', JSON.stringify(JSON.parse(localStorage.getItem('e4-pending-photo-deletes') || '[]').filter(item => item !== id))),
       getPendingSessionDeletes: () => JSON.parse(localStorage.getItem('e4-pending-session-deletes') || '[]'),
       markSessionDeleted: key => localStorage.setItem('e4-pending-session-deletes', JSON.stringify(JSON.parse(localStorage.getItem('e4-pending-session-deletes') || '[]').filter(item => item !== key))),
       onSave: listener => saveListeners.push(listener),
-      onPhotoSaved: listener => photoListeners.push(listener),
-      onPhotoDeleted: listener => photoDeleteListeners.push(listener),
       isSignedIn: () => false,
       setStatus: (label, detail) => {
         document.querySelector('#syncButton').textContent = label;

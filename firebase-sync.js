@@ -14,8 +14,6 @@ let auth;
 let db;
 let sessionsCollection;
 const uploadedSessions = new Map();
-const uploadedPhotos = new Set();
-const dirtyPhotos = new Set();
 
 const setStatus = (label, detail) => bridge.setStatus(label, detail);
 const isOwner = () => currentUser?.uid === ownerUid;
@@ -41,8 +39,6 @@ function scheduleSync() {
 }
 
 bridge.onSave(scheduleSync);
-bridge.onPhotoSaved(id => { dirtyPhotos.add(id); scheduleSync(); });
-bridge.onPhotoDeleted(scheduleSync);
 
 if (!['apiKey', 'authDomain', 'projectId', 'appId', 'ownerUid'].every(key => String(config[key] || '').trim())) {
   setStatus('同步尚未設定', '本機計數與照片仍可使用。');
@@ -66,7 +62,6 @@ async function start() {
   db = firestoreApi.getFirestore(app);
   sessionsCollection = firestoreApi.collection(db, 'e4Owners', ownerUid, 'sessions');
   await authApi.setPersistence(auth, authApi.browserLocalPersistence);
-  window.e4CloudDownloadPhoto = downloadPhoto;
 
   const handleSyncClick = async () => {
     if (isOwner()) {
@@ -147,21 +142,12 @@ async function flush() {
   if (!isOwner() || !ready) return;
   if (busy) { rerun = true; return; }
   busy = true;
-  setStatus('同步中…', '正在同步計數與照片。');
+  setStatus('同步中…', '正在同步計數與照片對照資訊；不會上傳照片。');
   try {
     for (const key of bridge.getPendingSessionDeletes()) {
       await firestoreApi.deleteDoc(firestoreApi.doc(sessionsCollection, await documentId(key)));
       uploadedSessions.delete(key);
       bridge.markSessionDeleted(key);
-    }
-    const referenced = new Set(bridge.getPhotoIds());
-    for (const id of bridge.getPendingPhotoDeletes()) {
-      if (!referenced.has(id)) await removeRemotePhoto(id);
-      bridge.markPhotoDeleted(id);
-    }
-    for (const id of referenced) {
-      const blob = await bridge.getLocalPhoto(id);
-      if (blob) await uploadPhoto(id, blob);
     }
     for (const [key, session] of Object.entries(bridge.getSessions())) {
       if (!session.sampleName) continue;
@@ -171,7 +157,7 @@ async function flush() {
       await firestoreApi.setDoc(ref, { key, session, updatedAt: firestoreApi.serverTimestamp() });
       uploadedSessions.set(key, value);
     }
-    setStatus('已同步 · 登出', `已連結 ${currentUser.email}；本機和雲端均有紀錄。`);
+    setStatus('已同步 · 登出', `已連結 ${currentUser.email}；只同步計數與照片對照資訊，照片留在原裝置。`);
   } catch (error) {
     console.error('E4 sync failed.', error);
     setStatus('同步失敗，點此重試', error.code === 'permission-denied'
@@ -183,53 +169,4 @@ async function flush() {
     busy = false;
     if (rerun) { rerun = false; scheduleSync(); }
   }
-}
-
-async function photoRef(id) {
-  return firestoreApi.doc(db, 'e4Owners', ownerUid, 'photos', await documentId(id));
-}
-
-async function uploadPhoto(id, blob) {
-  if (uploadedPhotos.has(id) && !dirtyPhotos.has(id)) return;
-  const ref = await photoRef(id);
-  const existing = await firestoreApi.getDoc(ref);
-  if (existing.exists() && !dirtyPhotos.has(id)) { uploadedPhotos.add(id); return; }
-  const dataUrl = await new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
-  const chunks = dataUrl.match(/.{1,300000}/g) || [];
-  for (let i = 0; i < chunks.length; i++) {
-    await firestoreApi.setDoc(firestoreApi.doc(ref, 'parts', String(i)), { data: chunks[i] });
-  }
-  const prior = existing.exists() ? Number(existing.data().partCount || 0) : 0;
-  for (let i = chunks.length; i < prior; i++) await firestoreApi.deleteDoc(firestoreApi.doc(ref, 'parts', String(i)));
-  await firestoreApi.setDoc(ref, { photoId: id, partCount: chunks.length, mimeType: blob.type, updatedAt: firestoreApi.serverTimestamp() });
-  uploadedPhotos.add(id);
-  dirtyPhotos.delete(id);
-}
-
-async function downloadPhoto(id) {
-  if (!isOwner()) return undefined;
-  const ref = await photoRef(id);
-  const meta = await firestoreApi.getDoc(ref);
-  if (!meta.exists()) return undefined;
-  const count = Number(meta.data().partCount || 0);
-  if (count < 1 || count > 100) throw new Error('Invalid E4 photo chunk count');
-  const parts = await Promise.all(Array.from({ length: count }, (_, i) => firestoreApi.getDoc(firestoreApi.doc(ref, 'parts', String(i)))));
-  if (parts.some(part => !part.exists())) throw new Error('E4 photo is incomplete');
-  const dataUrl = parts.map(part => part.data().data).join('');
-  return fetch(dataUrl).then(response => response.blob());
-}
-
-async function removeRemotePhoto(id) {
-  const ref = await photoRef(id);
-  const meta = await firestoreApi.getDoc(ref);
-  if (!meta.exists()) return;
-  const count = Number(meta.data().partCount || 0);
-  for (let i = 0; i < count; i++) await firestoreApi.deleteDoc(firestoreApi.doc(ref, 'parts', String(i)));
-  await firestoreApi.deleteDoc(ref);
-  uploadedPhotos.delete(id);
 }
