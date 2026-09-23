@@ -123,7 +123,7 @@
     label { display: grid; gap: 7px; font-size: .82rem; font-weight: 800; }
     .hint { color: var(--muted); font-size: .75rem; font-weight: 500; line-height: 1.45; }
 
-    input, textarea {
+    input, select, textarea {
       width: 100%;
       border: 1px solid var(--line);
       border-radius: 11px;
@@ -132,9 +132,22 @@
       outline: none;
     }
 
-    input { min-height: 45px; padding: 0 12px; }
+    input, select { min-height: 45px; padding: 0 12px; }
     textarea { min-height: 76px; padding: 11px 12px; resize: vertical; }
-    input:focus, textarea:focus { border-color: var(--green-2); box-shadow: 0 0 0 3px var(--focus-ring); }
+    input:focus, select:focus, textarea:focus { border-color: var(--green-2); box-shadow: 0 0 0 3px var(--focus-ring); }
+
+    .record-manager {
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) auto auto;
+      gap: 10px;
+      align-items: end;
+      margin-top: 16px;
+      padding: 14px;
+      border: 1px solid var(--divider);
+      border-radius: 14px;
+      background: var(--photo-bg);
+    }
+    .record-manager .btn { white-space: nowrap; }
 
     .button-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 15px; }
     .btn {
@@ -155,31 +168,31 @@
     .toolbar h2 { margin: 0; font-size: 1rem; }
     .progress { color: var(--muted); font-size: .8rem; font-weight: 750; }
 
-    .salinity-group { margin-bottom: 26px; }
-    .salinity-title { display: flex; align-items: center; gap: 10px; margin: 0 0 11px; font-size: 1.12rem; }
+    .salinity-group { margin-bottom: 18px; }
+    .salinity-title { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; font-size: 1rem; }
     .salinity-title::after { content: ""; height: 1px; flex: 1; background: var(--divider); }
     .salinity-badge { padding: 5px 10px; border-radius: 999px; color: white; background: var(--green); font-size: .75rem; }
 
-    .plate-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
-    .plate-card { border-radius: 17px; padding: 16px; overflow: hidden; }
+    .plate-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    .plate-card { border-radius: 14px; padding: 11px; overflow: hidden; box-shadow: 0 7px 20px rgba(14, 43, 34, .07); }
     .plate-card.complete { border-color: var(--complete-border); }
 
-    .card-top { display: flex; justify-content: space-between; gap: 12px; align-items: start; margin-bottom: 13px; }
-    .rep { margin: 0; font-size: 1.05rem; }
+    .card-top { display: flex; justify-content: space-between; gap: 10px; align-items: start; margin-bottom: 8px; }
+    .rep { margin: 0; font-size: .92rem; }
     .total { text-align: right; }
     .total span { display: block; color: var(--muted); font-size: .66rem; font-weight: 800; text-transform: uppercase; letter-spacing: .07em; }
-    .total strong { font-family: Georgia, serif; font-size: 1.55rem; color: var(--green); }
+    .total strong { font-family: Georgia, serif; font-size: 1.2rem; color: var(--green); }
 
-    .section-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+    .section-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
     .section-grid label { font-size: .72rem; }
-    .section-grid input { min-height: 41px; }
+    .section-grid input { min-height: 36px; }
 
     .photo-zone {
       position: relative;
       display: grid;
       place-items: center;
-      min-height: 112px;
-      margin-top: 13px;
+      min-height: 78px;
+      margin-top: 9px;
       overflow: hidden;
       border: 1px dashed var(--photo-line);
       border-radius: 12px;
@@ -189,19 +202,35 @@
     }
 
     .photo-zone input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
-    .photo-zone img { width: 100%; height: 150px; object-fit: cover; display: none; }
+    .photo-zone img { width: 100%; height: 105px; object-fit: cover; display: none; }
     .photo-zone.has-photo img { display: block; }
     .photo-zone.has-photo .photo-prompt { display: none; }
-    .photo-prompt { padding: 14px; font-size: .78rem; font-weight: 800; line-height: 1.5; }
-    .photo-prompt b { display: block; font-size: 1.35rem; }
+    .photo-prompt { padding: 8px; font-size: .72rem; font-weight: 800; line-height: 1.35; }
+    .photo-prompt b { display: inline; margin-right: 4px; font-size: 1rem; }
 
-    .photo-actions { display: flex; gap: 8px; margin-top: 8px; }
-    .small-btn { flex: 1; min-height: 34px; border: 0; border-radius: 9px; color: var(--green); background: var(--mint); font-size: .72rem; font-weight: 800; }
+    .photo-actions { display: flex; gap: 6px; margin-top: 6px; }
+    .small-btn { flex: 1; min-height: 31px; border: 0; border-radius: 8px; color: var(--green); background: var(--mint); font-size: .7rem; font-weight: 800; }
     .small-btn.remove-photo { color: var(--danger); background: var(--danger-soft); display: none; }
     .plate-card.has-photo .remove-photo { display: block; }
 
-    .note { margin-top: 10px; }
-    .note textarea { min-height: 58px; font-size: .8rem; }
+    .note { margin-top: 7px; }
+    .note textarea { min-height: 44px; font-size: .8rem; }
+
+    .record-save-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      margin: 4px 0 22px;
+      padding: 12px 14px;
+      border: 1px solid var(--divider);
+      border-radius: 14px;
+      color: var(--muted);
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      font-size: .78rem;
+    }
+    .record-save-bar .btn { flex: 0 0 auto; }
 
     .empty { padding: 46px 20px; border: 1px dashed var(--line); border-radius: 18px; color: var(--muted); text-align: center; }
 
@@ -259,8 +288,12 @@
       .header-actions { justify-items: start; margin-top: 14px; }
       .save-status { display: inline-block; }
       .setup-grid { grid-template-columns: 1fr; }
+      .record-manager { grid-template-columns: 1fr 1fr; }
+      .record-manager label { grid-column: 1 / -1; }
       .button-row .btn { flex: 1; }
       .toolbar { align-items: start; }
+      .record-save-bar { align-items: stretch; flex-direction: column; }
+      .record-save-bar .btn { width: 100%; }
       .photo-library-head { display: block; }
       .photo-search { max-width: none; margin-top: 12px; }
     }
@@ -314,8 +347,19 @@
           <span class="hint">套用到這次紀錄。</span>
         </label>
       </div>
+      <div class="record-manager">
+        <label>
+          已儲存紀錄（含自動儲存）
+          <select id="sessionSelect" aria-label="選擇已儲存的 E4 紀錄">
+            <option value="">尚無已儲存紀錄</option>
+          </select>
+        </label>
+        <button class="btn secondary" id="loadSession" type="button">載入並編輯</button>
+        <button class="btn save-record" type="button">儲存目前紀錄</button>
+      </div>
       <div class="button-row">
-        <button class="btn" id="applySetup" type="button">建立／更新記錄表</button>
+        <button class="btn" id="applySetup" type="button">新增樣本／更新記錄表</button>
+        <button class="btn secondary" id="renameSession" type="button">修正目前樣本名稱</button>
         <button class="btn secondary" id="exportCsv" type="button">匯出 CSV</button>
         <button class="btn secondary" id="backupJson" type="button">下載完整備份 JSON</button>
         <button class="btn secondary" id="restoreJson" type="button">匯入完整備份</button>
@@ -323,6 +367,7 @@
         <button class="btn danger" id="clearAll" type="button">清除全部</button>
         <input id="restoreFile" type="file" accept="application/json,.json" hidden />
       </div>
+      <p class="hint">換下一個樣本：輸入新名稱，按「新增樣本／更新記錄表」。打錯目前樣本名稱：按「修正目前樣本名稱」。</p>
     </section>
 
     <div class="toolbar">
@@ -331,6 +376,11 @@
     </div>
 
     <main id="records"></main>
+
+    <div class="record-save-bar">
+      <span>計數、照片與備註輸入完成後，按下儲存以確認這筆紀錄。</span>
+      <button class="btn save-record" type="button">儲存目前紀錄</button>
+    </div>
 
     <section class="panel photo-library" aria-labelledby="photoLibraryTitle">
       <div class="photo-library-head">
@@ -364,6 +414,7 @@
     const salinitiesEl = document.querySelector('#salinities');
     const sectionCountEl = document.querySelector('#sectionCount');
     const countDateEl = document.querySelector('#countDate');
+    const sessionSelectEl = document.querySelector('#sessionSelect');
     const statusEl = document.querySelector('#saveStatus');
     const progressEl = document.querySelector('#progress');
     const photoSearchEl = document.querySelector('#photoSearch');
@@ -410,10 +461,11 @@
       }
     }
 
-    function saveState() {
+    function saveState(message = '') {
       saveCurrentSession();
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      statusEl.textContent = '已儲存 ' + new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
+      const time = new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
+      statusEl.textContent = message || `草稿已自動儲存 ${time}`;
     }
 
     function sessionKey(sampleName = state.sampleName, countDate = state.countDate) {
@@ -432,6 +484,27 @@
     }
 
     function clone(value) { return JSON.parse(JSON.stringify(value)); }
+
+    function renderSessionOptions() {
+      const sessions = Object.entries(state.sessions || {})
+        .filter(([, session]) => String(session.sampleName || '').trim())
+        .sort(([, a], [, b]) => `${b.countDate || ''}${b.sampleName || ''}`.localeCompare(`${a.countDate || ''}${a.sampleName || ''}`));
+      sessionSelectEl.innerHTML = sessions.length
+        ? '<option value="">選擇一筆紀錄…</option>' + sessions.map(([key, session]) => `<option value="${escapeHtml(key)}">${escapeHtml(session.countDate || '未填日期')} · ${escapeHtml(session.sampleName || '未命名樣本')}</option>`).join('')
+        : '<option value="">尚無已儲存紀錄</option>';
+      const currentKey = sessionKey();
+      if (sessions.some(([key]) => key === currentKey)) sessionSelectEl.value = currentKey;
+    }
+
+    function explicitlySaveRecord() {
+      if (sampleNameEl.value.trim() !== state.sampleName || countDateEl.value !== state.countDate) {
+        return alert('上方的樣本名稱或日期尚未套用。請先按「建立／更新記錄表」；若是要修正目前紀錄的名稱，請按「修正目前樣本名稱」。');
+      }
+      if (!String(state.sampleName || '').trim()) return alert('請先輸入樣本名稱並按「建立／更新記錄表」。');
+      const time = new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
+      saveState(`✓ ${state.sampleName} 已儲存 ${time}`);
+      renderSessionOptions();
+    }
 
     function loadSession(key) {
       const session = state.sessions?.[key];
@@ -560,6 +633,7 @@
       if (!state.salinities.length) {
         recordsEl.innerHTML = '<div class="empty">請先輸入至少一個鹽度濃度。</div>';
         progressEl.textContent = '0 / 0 完成計數';
+        renderSessionOptions();
         return;
       }
 
@@ -609,6 +683,7 @@
       });
 
       progressEl.textContent = `${completed} / ${state.salinities.length * 3} 完成計數`;
+      renderSessionOptions();
       renderPhotoLibrary();
     }
 
@@ -750,12 +825,7 @@
       saveCurrentSession();
       const nextKey = sessionKey(sampleName, countDate);
       const isNamingExistingRecord = !state.sampleName && countDate === state.countDate && nextKey !== oldKey;
-      const isRenamingCurrentRecord = Boolean(state.sampleName)
-        && sampleName !== state.sampleName
-        && countDate === state.countDate
-        && nextKey !== oldKey
-        && !state.sessions[nextKey];
-      if (isNamingExistingRecord || isRenamingCurrentRecord) {
+      if (isNamingExistingRecord && !state.sessions[nextKey]) {
         state.sampleName = sampleName;
         state.salinities = salinities;
         state.sectionCount = sections;
@@ -776,6 +846,22 @@
       }
       ensureRecords();
       saveState();
+      render();
+    });
+
+    document.querySelector('#renameSession').addEventListener('click', () => {
+      const newName = sampleNameEl.value.trim();
+      if (!state.sampleName) return alert('請先建立或載入一筆有樣本名稱的紀錄。');
+      if (!newName) return alert('請輸入新的樣本名稱。');
+      if (countDateEl.value !== state.countDate) return alert('修正樣本名稱時請保持原本的計數日期。');
+      if (newName === state.sampleName) return alert('樣本名稱沒有變更。');
+      const oldKey = sessionKey();
+      const newKey = sessionKey(newName, state.countDate);
+      if (state.sessions?.[newKey]) return alert('同一天已經有這個樣本名稱，請換一個名稱。');
+      saveCurrentSession();
+      state.sampleName = newName;
+      delete state.sessions[oldKey];
+      saveState(`✓ 已將樣本名稱修正為 ${newName}`);
       render();
     });
 
@@ -987,6 +1073,13 @@
     });
 
     photoSearchEl.addEventListener('input', renderPhotoLibrary);
+    document.querySelectorAll('.save-record').forEach(button => button.addEventListener('click', explicitlySaveRecord));
+    document.querySelector('#loadSession').addEventListener('click', () => {
+      const key = sessionSelectEl.value;
+      if (!key) return alert('請先從「已儲存紀錄」選擇一筆資料。');
+      loadSession(key);
+      statusEl.textContent = `已載入 ${state.sampleName}，修改後請再按「儲存目前紀錄」`;
+    });
     document.querySelector('#viewerClose').addEventListener('click', () => photoViewerEl.close());
     photoViewerEl.addEventListener('click', event => { if (event.target === photoViewerEl) photoViewerEl.close(); });
 
