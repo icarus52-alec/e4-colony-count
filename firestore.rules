@@ -1,0 +1,25 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Existing recipe library: public read, owner write.
+    match /libraries/master {
+      allow read: if true;
+      allow create, update, delete: if request.auth != null
+                                    && request.auth.uid == 'ljJlyQ360cPg3kVzxngvHsm2Kco1';
+    }
+
+    match /users/{userId} {
+      allow read: if request.auth != null
+                  && request.auth.uid == 'ljJlyQ360cPg3kVzxngvHsm2Kco1'
+                  && userId == 'ljJlyQ360cPg3kVzxngvHsm2Kco1';
+      allow write: if false;
+    }
+
+    // E4 counts and images are private to the same owner account.
+    match /e4Owners/{userId}/{document=**} {
+      allow read, write: if request.auth != null
+                         && request.auth.uid == 'ljJlyQ360cPg3kVzxngvHsm2Kco1'
+                         && userId == request.auth.uid;
+    }
+  }
+}

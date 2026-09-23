@@ -209,12 +209,15 @@
     .photo-prompt b { display: inline; margin-right: 4px; font-size: 1rem; }
 
     .photo-actions { display: flex; gap: 6px; margin-top: 6px; }
+    .plate-card:not(.has-photo) .photo-actions { display: none; }
     .small-btn { flex: 1; min-height: 31px; border: 0; border-radius: 8px; color: var(--green); background: var(--mint); font-size: .7rem; font-weight: 800; }
     .small-btn.remove-photo { color: var(--danger); background: var(--danger-soft); display: none; }
     .plate-card.has-photo .remove-photo { display: block; }
 
     .note { margin-top: 7px; }
-    .note textarea { min-height: 44px; font-size: .8rem; }
+    .note summary { cursor: pointer; font-size: .76rem; font-weight: 800; }
+    .note textarea { min-height: 44px; margin-top: 5px; font-size: .8rem; }
+    .section-grid.one-section { grid-template-columns: minmax(0, 140px); }
 
     .record-save-bar {
       display: flex;
@@ -290,7 +293,20 @@
       .setup-grid { grid-template-columns: 1fr; }
       .record-manager { grid-template-columns: 1fr 1fr; }
       .record-manager label { grid-column: 1 / -1; }
-      .button-row .btn { flex: 1; }
+      .button-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+      .button-row .btn { min-width: 0; min-height: 36px; padding: 7px 9px; font-size: .8rem; line-height: 1.25; overflow-wrap: anywhere; }
+      .button-row .btn:first-child { grid-column: 1 / -1; }
+      .extra-actions .button-row .btn:first-child { grid-column: auto; }
+      .extra-actions { margin-top: 8px; }
+      .extra-actions summary { min-height: 36px; padding: 8px 11px; border-radius: 10px; color: var(--green); background: var(--mint); font-weight: 800; cursor: pointer; }
+      .plate-card { padding: 9px; }
+      .card-top { margin-bottom: 5px; }
+      .section-grid input { min-height: 32px; padding: 3px 9px; }
+      .photo-zone { min-height: 48px; margin-top: 6px; }
+      .photo-zone img { height: 74px; }
+      .photo-prompt { padding: 5px; }
+      .note { margin-top: 5px; }
+      .note textarea { min-height: 38px; }
       .toolbar { align-items: start; }
       .record-save-bar { align-items: stretch; flex-direction: column; }
       .record-save-bar .btn { width: 100%; }
@@ -320,6 +336,8 @@
           <button class="theme-dot" type="button" data-theme="violet" style="--swatch:#7a2cff;--swatch-2:#ffffff" aria-label="紫羅蘭" title="紫羅蘭"></button>
         </div>
         <div class="save-status" id="saveStatus">資料儲存在此裝置</div>
+        <button class="btn secondary" id="syncButton" type="button">登入以同步</button>
+        <span class="hint" id="syncStatus">尚未登入，資料只在此裝置。</span>
       </div>
     </header>
 
@@ -360,13 +378,18 @@
       <div class="button-row">
         <button class="btn" id="applySetup" type="button">新增樣本／更新記錄表</button>
         <button class="btn secondary" id="renameSession" type="button">修正目前樣本名稱</button>
+      </div>
+      <details class="extra-actions">
+        <summary>匯出、備份與管理</summary>
+        <div class="button-row">
         <button class="btn secondary" id="exportCsv" type="button">匯出 CSV</button>
         <button class="btn secondary" id="backupJson" type="button">下載完整備份 JSON</button>
         <button class="btn secondary" id="restoreJson" type="button">匯入完整備份</button>
         <button class="btn secondary" id="readableBackup" type="button">下載可閱讀備份 ZIP</button>
         <button class="btn danger" id="clearAll" type="button">清除全部</button>
         <input id="restoreFile" type="file" accept="application/json,.json" hidden />
-      </div>
+        </div>
+      </details>
       <p class="hint">換下一個樣本：輸入新名稱，按「新增樣本／更新記錄表」。打錯目前樣本名稱：按「修正目前樣本名稱」。</p>
     </section>
 
@@ -423,6 +446,9 @@
     const viewerImageEl = document.querySelector('#viewerImage');
     const viewerCaptionEl = document.querySelector('#viewerCaption');
     const themeKey = 'e4-colony-theme-v1';
+    const saveListeners = [];
+    const photoListeners = [];
+    const photoDeleteListeners = [];
     let galleryUrls = [];
     let galleryRenderToken = 0;
 
@@ -461,11 +487,13 @@
       }
     }
 
-    function saveState(message = '') {
+    function saveState(message = '', modified = true) {
       saveCurrentSession();
+      if (modified) state.sessions[sessionKey()].updatedAt = new Date().toISOString();
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       const time = new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
       statusEl.textContent = message || `草稿已自動儲存 ${time}`;
+      if (modified) saveListeners.forEach(listener => listener());
     }
 
     function sessionKey(sampleName = state.sampleName, countDate = state.countDate) {
@@ -475,6 +503,7 @@
     function saveCurrentSession() {
       state.sessions ||= {};
       state.sessions[sessionKey()] = {
+        ...state.sessions[sessionKey()],
         sampleName: state.sampleName || '',
         countDate: state.countDate,
         salinities: [...state.salinities],
@@ -484,6 +513,55 @@
     }
 
     function clone(value) { return JSON.parse(JSON.stringify(value)); }
+
+    function mergeCloudSessions(remoteSessions) {
+      saveCurrentSession();
+      const uploadKeys = new Set();
+      Object.entries(remoteSessions).forEach(([key, remote]) => {
+        if (JSON.parse(localStorage.getItem('e4-pending-session-deletes') || '[]').includes(key)) return;
+        const local = state.sessions[key];
+        if (!local) { state.sessions[key] = clone(remote); return; }
+        if (JSON.stringify(local) === JSON.stringify(remote)) return;
+        const localTime = Date.parse(local.updatedAt || '') || 0;
+        const remoteTime = Date.parse(remote.updatedAt || '') || 0;
+        if (remoteTime > localTime) {
+          if (localTime > 0) {
+            const backup = clone(local);
+            backup.sampleName = `${local.sampleName}（本機版本 ${new Date().toLocaleDateString('sv-SE')}）`;
+            const backupKey = sessionKey(backup.sampleName, backup.countDate);
+            if (!state.sessions[backupKey]) { state.sessions[backupKey] = backup; uploadKeys.add(backupKey); }
+          }
+          state.sessions[key] = clone(remote);
+        } else {
+          if (localTime === 0 && remoteTime === 0) {
+            const backup = clone(remote);
+            backup.sampleName = `${remote.sampleName}（雲端版本 ${new Date().toLocaleDateString('sv-SE')}）`;
+            const backupKey = sessionKey(backup.sampleName, backup.countDate);
+            if (!state.sessions[backupKey]) { state.sessions[backupKey] = backup; uploadKeys.add(backupKey); }
+          }
+          uploadKeys.add(key);
+        }
+      });
+      Object.keys(state.sessions).forEach(key => { if (!remoteSessions[key] && state.sessions[key].sampleName) uploadKeys.add(key); });
+      let activeKey = sessionKey();
+      if (!state.sampleName) {
+        activeKey = Object.entries(state.sessions)
+          .filter(([, session]) => session.sampleName)
+          .sort(([, a], [, b]) => String(b.updatedAt || b.countDate).localeCompare(String(a.updatedAt || a.countDate)))[0]?.[0] || activeKey;
+      }
+      const active = state.sessions[activeKey];
+      if (active) {
+        state.sampleName = active.sampleName || '';
+        state.countDate = active.countDate || todayLocal();
+        state.salinities = [...(active.salinities || [])];
+        state.sectionCount = active.sectionCount || 4;
+        state.records = clone(active.records || {});
+      }
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      ensureRecords();
+      render();
+      return [...uploadKeys];
+    }
 
     function renderSessionOptions() {
       const sessions = Object.entries(state.sessions || {})
@@ -516,7 +594,7 @@
       state.sectionCount = session.sectionCount;
       state.records = clone(session.records || {});
       ensureRecords();
-      saveState();
+      saveState('', false);
       render();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -564,9 +642,12 @@
         tx.onerror = () => reject(tx.error);
       });
       db.close();
+      const pending = JSON.parse(localStorage.getItem('e4-pending-photo-deletes') || '[]').filter(item => item !== id);
+      localStorage.setItem('e4-pending-photo-deletes', JSON.stringify(pending));
+      photoListeners.forEach(listener => listener(id));
     }
 
-    async function getPhoto(id) {
+    async function getLocalPhoto(id) {
       const db = await openPhotoDb();
       const blob = await new Promise((resolve, reject) => {
         const request = db.transaction(DB_STORE).objectStore(DB_STORE).get(id);
@@ -575,6 +656,29 @@
       });
       db.close();
       return blob;
+    }
+
+    async function getPhoto(id) {
+      const local = await getLocalPhoto(id);
+      if (local) return local;
+      let remote;
+      try { remote = await window.e4CloudDownloadPhoto?.(id); } catch (error) { console.warn('E4 photo download failed.', error); }
+      if (remote) {
+        await cachePhoto(id, remote);
+        return remote;
+      }
+      return undefined;
+    }
+
+    async function cachePhoto(id, blob) {
+      const db = await openPhotoDb();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(DB_STORE, 'readwrite');
+        tx.objectStore(DB_STORE).put(blob, id);
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+      });
+      db.close();
     }
 
     async function deletePhoto(id) {
@@ -586,6 +690,10 @@
         tx.onerror = () => reject(tx.error);
       });
       db.close();
+      const pending = new Set(JSON.parse(localStorage.getItem('e4-pending-photo-deletes') || '[]'));
+      pending.add(id);
+      localStorage.setItem('e4-pending-photo-deletes', JSON.stringify([...pending]));
+      photoDeleteListeners.forEach(listener => listener(id));
     }
 
     async function replaceAllPhotos(photoMap) {
@@ -662,17 +770,16 @@
               <h4 class="rep">R${rep}</h4>
               <div class="total"><span>Total colonies</span><strong>${totalFor(record)}</strong></div>
             </div>
-            <div class="section-grid">${sectionInputs}</div>
+            <div class="section-grid${record.counts.length === 1 ? ' one-section' : ''}">${sectionInputs}</div>
             <div class="photo-zone${record.hasPhoto ? ' has-photo' : ''}">
               <img alt="${salinity} ppt R${rep} 培養盤照片" />
               <div class="photo-prompt"><b>＋</b>拍照或選擇培養盤照片</div>
               <input class="photo-input" type="file" accept="image/*" capture="environment" aria-label="拍攝 ${salinity} ppt R${rep} 培養盤" />
             </div>
             <div class="photo-actions">
-              <button type="button" class="small-btn choose-photo">拍照／更換</button>
               <button type="button" class="small-btn remove-photo">移除照片</button>
             </div>
-            <label class="note">備註<textarea placeholder="污染、菌落重疊、特殊觀察…">${escapeHtml(record.note)}</textarea></label>`;
+            <details class="note"${record.note ? ' open' : ''}><summary>備註${record.note ? ' ✓' : ''}</summary><textarea placeholder="污染、菌落重疊、特殊觀察…">${escapeHtml(record.note)}</textarea></details>`;
 
           bindCard(card, record, id);
           grid.appendChild(card);
@@ -704,18 +811,19 @@
       });
 
       const fileInput = card.querySelector('.photo-input');
-      card.querySelector('.choose-photo').addEventListener('click', () => fileInput.click());
       fileInput.addEventListener('change', async () => {
         const file = fileInput.files?.[0];
         if (!file) return;
         statusEl.textContent = '正在處理照片…';
         try {
           const blob = await compressImage(file);
-          const photoId = record.photoId || `${sessionKey()}::${id}`;
+          const previousPhotoId = record.photoId;
+          const photoId = `${sessionKey()}::${id}::${crypto.randomUUID()}`;
           await savePhoto(photoId, blob);
           record.hasPhoto = true;
           record.photoId = photoId;
           saveState();
+          if (previousPhotoId) await deletePhoto(previousPhotoId);
           card.classList.add('has-photo');
           card.querySelector('.photo-zone').classList.add('has-photo');
           setPreview(card, blob);
@@ -861,6 +969,9 @@
       saveCurrentSession();
       state.sampleName = newName;
       delete state.sessions[oldKey];
+      const pending = new Set(JSON.parse(localStorage.getItem('e4-pending-session-deletes') || '[]'));
+      pending.add(oldKey);
+      localStorage.setItem('e4-pending-session-deletes', JSON.stringify([...pending]));
       saveState(`✓ 已將樣本名稱修正為 ${newName}`);
       render();
     });
@@ -1063,8 +1174,11 @@
     }
 
     document.querySelector('#clearAll').addEventListener('click', async () => {
+      if (window.e4SyncBridge?.isSignedIn()) return alert('目前已登入雲端同步。請先登出，再清除這台裝置的資料；雲端紀錄不會被刪除。');
       if (!confirm('確定清除所有 E4 計數與照片？此動作無法復原。')) return;
       localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem('e4-pending-photo-deletes');
+      localStorage.removeItem('e4-pending-session-deletes');
       indexedDB.deleteDatabase(DB_NAME);
       Object.assign(state, defaultState());
       ensureRecords();
@@ -1083,12 +1197,33 @@
     document.querySelector('#viewerClose').addEventListener('click', () => photoViewerEl.close());
     photoViewerEl.addEventListener('click', event => { if (event.target === photoViewerEl) photoViewerEl.close(); });
 
+    window.e4SyncBridge = {
+      getSessions: () => clone(state.sessions || {}),
+      mergeCloudSessions,
+      getPhotoIds: () => [...new Set(Object.values(state.sessions || {}).flatMap(session => Object.entries(session.records || {}).filter(([, record]) => record.hasPhoto).map(([id, record]) => record.photoId || id)))],
+      getLocalPhoto,
+      getPendingPhotoDeletes: () => JSON.parse(localStorage.getItem('e4-pending-photo-deletes') || '[]'),
+      markPhotoDeleted: id => localStorage.setItem('e4-pending-photo-deletes', JSON.stringify(JSON.parse(localStorage.getItem('e4-pending-photo-deletes') || '[]').filter(item => item !== id))),
+      getPendingSessionDeletes: () => JSON.parse(localStorage.getItem('e4-pending-session-deletes') || '[]'),
+      markSessionDeleted: key => localStorage.setItem('e4-pending-session-deletes', JSON.stringify(JSON.parse(localStorage.getItem('e4-pending-session-deletes') || '[]').filter(item => item !== key))),
+      onSave: listener => saveListeners.push(listener),
+      onPhotoSaved: listener => photoListeners.push(listener),
+      onPhotoDeleted: listener => photoDeleteListeners.push(listener),
+      isSignedIn: () => false,
+      setStatus: (label, detail) => {
+        document.querySelector('#syncButton').textContent = label;
+        document.querySelector('#syncStatus').textContent = detail;
+      }
+    };
+
     applyTheme(localStorage.getItem(themeKey) || 'pumpkin');
     sampleNameEl.value = state.sampleName || '';
     countDateEl.value = state.countDate || todayLocal();
     ensureRecords();
-    saveState();
+    saveState('', false);
     render();
   </script>
+  <script src="firebase-config.js"></script>
+  <script type="module" src="firebase-sync.js"></script>
 </body>
 </html>
