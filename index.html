@@ -746,7 +746,12 @@
       saveCurrentSession();
       const nextKey = sessionKey(sampleName, countDate);
       const isNamingExistingRecord = !state.sampleName && countDate === state.countDate && nextKey !== oldKey;
-      if (isNamingExistingRecord) {
+      const isRenamingCurrentRecord = Boolean(state.sampleName)
+        && sampleName !== state.sampleName
+        && countDate === state.countDate
+        && nextKey !== oldKey
+        && !state.sessions[nextKey];
+      if (isNamingExistingRecord || isRenamingCurrentRecord) {
         state.sampleName = sampleName;
         state.salinities = salinities;
         state.sectionCount = sections;
